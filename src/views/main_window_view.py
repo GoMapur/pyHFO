@@ -961,6 +961,33 @@ class MainWindowView(QObject):
             QTabWidget[inspectorTabs="true"] QTabBar::tab:hover {
                 color: #31495c;
             }
+            QToolButton[inspectorSegBtn="true"] {
+                background: #eef2f5;
+                color: #5b6d7a;
+                border: 1px solid #cdd6de;
+                padding: 5px 0px;
+                font-size: 11px;
+                font-weight: 600;
+                border-radius: 0px;
+            }
+            QToolButton[inspectorSegBtn="true"][segFirst="true"] {
+                border-top-left-radius: 6px;
+                border-bottom-left-radius: 6px;
+            }
+            QToolButton[inspectorSegBtn="true"][segLast="true"] {
+                border-top-right-radius: 6px;
+                border-bottom-right-radius: 6px;
+                border-left: none;
+            }
+            QToolButton[inspectorSegBtn="true"]:checked {
+                background: #2d4e61;
+                color: #ffffff;
+                border-color: #2d4e61;
+            }
+            QToolButton[inspectorSegBtn="true"]:hover:!checked {
+                background: #dce4ea;
+                color: #2d4e61;
+            }
             QSplitter#loadedWorkspaceSplitter::handle {
                 background: #e6edf2;
             }
@@ -2178,30 +2205,161 @@ class MainWindowView(QObject):
         content = QWidget(dock)
         content.setObjectName("InspectorContent")
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         hidden_state = self._build_active_run_group()
         hidden_state.hide()
         self.window.inspector_hidden_state_widget = hidden_state
 
-        layout.addWidget(self._build_run_toolbar())
-        layout.addWidget(self._build_results_section())
-        self._install_inspector_tabs()
+        # Segmented control: Analysis | Severity
+        seg_bar = QFrame(content)
+        seg_bar.setObjectName("inspectorSegBar")
+        seg_bar.setProperty("inspectorSegBar", True)
+        seg_layout = QHBoxLayout(seg_bar)
+        seg_layout.setContentsMargins(6, 6, 6, 0)
+        seg_layout.setSpacing(0)
 
+        btn_analysis = QToolButton(seg_bar)
+        btn_analysis.setText("Analysis")
+        btn_analysis.setCheckable(True)
+        btn_analysis.setChecked(True)
+        btn_analysis.setProperty("inspectorSegBtn", True)
+        btn_analysis.setProperty("segFirst", True)
+        btn_analysis.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        btn_severity = QToolButton(seg_bar)
+        btn_severity.setText("Severity")
+        btn_severity.setCheckable(True)
+        btn_severity.setChecked(False)
+        btn_severity.setProperty("inspectorSegBtn", True)
+        btn_severity.setProperty("segLast", True)
+        btn_severity.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        btn_severity.setVisible(False)
+
+        btn_group = QtWidgets.QButtonGroup(seg_bar)
+        btn_group.setExclusive(True)
+        btn_group.addButton(btn_analysis, 0)
+        btn_group.addButton(btn_severity, 1)
+
+        seg_layout.addWidget(btn_analysis)
+        seg_layout.addWidget(btn_severity)
+        layout.addWidget(seg_bar)
+
+        # Stacked content
+        stack = QtWidgets.QStackedWidget(content)
+        stack.setObjectName("inspectorStack")
+
+        # Page 0: Analysis — the existing pipeline
+        analysis_page = QWidget(stack)
+        analysis_page.setObjectName("InspectorAnalysisPage")
+        analysis_layout = QVBoxLayout(analysis_page)
+        analysis_layout.setContentsMargins(6, 6, 6, 6)
+        analysis_layout.setSpacing(4)
+        analysis_layout.addWidget(self._build_run_toolbar())
+        analysis_layout.addWidget(self._build_results_section())
+        self._install_inspector_tabs()
         self.window.tabWidget.setDocumentMode(True)
         self.window.tabWidget.setCurrentIndex(0)
         self.window.tabWidget.setMinimumWidth(0)
         self.window.tabWidget.setProperty("inspectorTabs", True)
-        layout.addWidget(self.window.tabWidget, 1)
+        analysis_layout.addWidget(self.window.tabWidget, 1)
+        stack.addWidget(analysis_page)
+
+        # Page 1: Severity — CBraMod scoring
+        severity_page = self._build_severity_tab()
+        stack.addWidget(severity_page)
+        stack.setCurrentIndex(0)
+
+        btn_group.idClicked.connect(stack.setCurrentIndex)
+        layout.addWidget(stack, 1)
 
         dock.setWidget(content)
         self.window.addDockWidget(Qt.RightDockWidgetArea, dock)
         self.window.inspector_dock = dock
-        self.window.inspector_container = content
+        self.window.inspector_container = analysis_page
+        self.window.inspector_seg_btn_analysis = btn_analysis
+        self.window.inspector_seg_btn_severity = btn_severity
+        self.window.inspector_stack = stack
         self.window.inspector_scroll_area = None
         dock.setMinimumWidth(density.inspector_dock_min_width)
         dock.setMaximumWidth(density.inspector_dock_max_width)
+
+    def _build_severity_tab(self):
+        page = QWidget()
+        page.setObjectName("InspectorSeverityPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(8)
+
+        # --- Scoring section ---
+        scoring_body = QFrame(page)
+        scoring_layout = QVBoxLayout(scoring_body)
+        scoring_layout.setContentsMargins(0, 0, 0, 0)
+        scoring_layout.setSpacing(4)
+
+        hint = QLabel("Score every 15-second window across the full recording using the bundled CBraMod model.")
+        hint.setWordWrap(True)
+        hint.setProperty("helperText", True)
+        scoring_layout.addWidget(hint)
+
+        self.window.severity_run_button = QPushButton("Run Scoring")
+        self.window.severity_run_button.setProperty("inspectorPrimary", True)
+        self.window.severity_run_button.setToolTip("Run severity scoring on the loaded scalp EEG")
+        run_row = QHBoxLayout()
+        run_row.addStretch(1)
+        run_row.addWidget(self.window.severity_run_button)
+        scoring_layout.addLayout(run_row)
+
+        layout.addWidget(self._wrap_inspector_section("SCORING", scoring_body))
+
+        # --- Results section ---
+        results_body = QFrame(page)
+        results_layout = QGridLayout(results_body)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.setHorizontalSpacing(8)
+        results_layout.setVerticalSpacing(4)
+
+        def _metric_label(text):
+            lbl = QLabel(text)
+            lbl.setProperty("fieldLabel", True)
+            return lbl
+
+        def _metric_value():
+            lbl = QLabel("--")
+            lbl.setProperty("metricValue", True)
+            return lbl
+
+        self.window.severity_mean_value = _metric_value()
+        self.window.severity_peak_value = _metric_value()
+        self.window.severity_peak_time_value = _metric_value()
+
+        results_layout.addWidget(_metric_label("Mean"), 0, 0)
+        results_layout.addWidget(self.window.severity_mean_value, 0, 1)
+        results_layout.addWidget(_metric_label("Peak"), 1, 0)
+        results_layout.addWidget(self.window.severity_peak_value, 1, 1)
+        results_layout.addWidget(_metric_label("Peak at"), 2, 0)
+        results_layout.addWidget(self.window.severity_peak_time_value, 2, 1)
+
+        self.window.severity_export_button = QPushButton("Export CSV")
+        self.window.severity_export_button.setToolTip("Export severity scores to a CSV file")
+        self.window.severity_export_button.setEnabled(False)
+        export_row = QHBoxLayout()
+        export_row.addStretch(1)
+        export_row.addWidget(self.window.severity_export_button)
+        results_outer = QVBoxLayout()
+        results_outer.setContentsMargins(0, 0, 0, 0)
+        results_outer.setSpacing(4)
+        results_outer.addWidget(results_body)
+        results_outer.addLayout(export_row)
+        results_frame = QFrame(page)
+        results_frame.setLayout(results_outer)
+
+        layout.addWidget(self._wrap_inspector_section("RESULTS", results_frame))
+        layout.addStretch(1)
+
+        self.window.severity_tab_page = page
+        return page
 
     def _build_inspector_header(self):
         frame = QFrame(self.window)
@@ -4247,6 +4405,17 @@ class MainWindowView(QObject):
 
     def apply_eeg_type_ui_state(self, eeg_type, biomarker_type=None):
         is_scalp = eeg_type == "scalp"
+
+        # Show/hide Severity button; if hiding while active, snap back to Analysis
+        btn_severity = getattr(self.window, "inspector_seg_btn_severity", None)
+        btn_analysis = getattr(self.window, "inspector_seg_btn_analysis", None)
+        stack = getattr(self.window, "inspector_stack", None)
+        if btn_severity is not None:
+            btn_severity.setVisible(is_scalp)
+            if not is_scalp and stack is not None and stack.currentIndex() == 1:
+                stack.setCurrentIndex(0)
+                if btn_analysis is not None:
+                    btn_analysis.setChecked(True)
 
         # Classification: always hidden for scalp EEG (all classifiers are iEEG-only)
         classification_body = self._inspector_section_roots.get("CLASSIFICATION")
