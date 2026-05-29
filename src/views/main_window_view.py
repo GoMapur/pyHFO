@@ -2309,7 +2309,12 @@ class MainWindowView(QObject):
         self.window.severity_run_button = QPushButton("Run Scoring")
         self.window.severity_run_button.setProperty("inspectorPrimary", True)
         self.window.severity_run_button.setToolTip("Run severity scoring on the loaded scalp EEG")
+
+        self.window.severity_load_button = QPushButton("Load Scores")
+        self.window.severity_load_button.setToolTip("Load previously exported severity scores from a CSV file")
+
         run_row = QHBoxLayout()
+        run_row.addWidget(self.window.severity_load_button)
         run_row.addStretch(1)
         run_row.addWidget(self.window.severity_run_button)
         scoring_layout.addLayout(run_row)
@@ -2383,6 +2388,21 @@ class MainWindowView(QObject):
         self.window.severity_window_list.setProperty("inspectorList", True)
         results_outer.addWidget(window_scores_label)
         results_outer.addWidget(self.window.severity_window_list)
+
+        # Score distribution plot
+        import pyqtgraph as pg
+        dist_label = QLabel("Score distribution")
+        dist_label.setProperty("fieldLabel", True)
+        self.window.severity_dist_plot = pg.PlotWidget()
+        self.window.severity_dist_plot.setFixedHeight(80)
+        self.window.severity_dist_plot.setBackground("w")
+        self.window.severity_dist_plot.getPlotItem().hideAxis("left")
+        self.window.severity_dist_plot.getPlotItem().hideButtons()
+        self.window.severity_dist_plot.getPlotItem().setMenuEnabled(False)
+        self.window.severity_dist_plot.setMouseEnabled(x=False, y=False)
+        self.window.severity_dist_plot.setXRange(0, 5, padding=0)
+        results_outer.addWidget(dist_label)
+        results_outer.addWidget(self.window.severity_dist_plot)
 
         # Export
         self.window.severity_export_button = QPushButton("Export CSV")

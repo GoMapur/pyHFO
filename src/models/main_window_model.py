@@ -3101,6 +3101,8 @@ class MainWindowModel(QObject):
             safe_connect_signal_slot(self.window.severity_jump_clean_button.clicked, self.severity_jump_to_most_severe_non_artifactual)
         if hasattr(self.window, "severity_next_button"):
             safe_connect_signal_slot(self.window.severity_next_button.clicked, self.severity_jump_to_next_severe)
+        if hasattr(self.window, "severity_load_button"):
+            safe_connect_signal_slot(self.window.severity_load_button.clicked, self.load_severity_scores)
 
         self.window.switch_run_button.setEnabled(False)
         self.window.accept_run_button.setEnabled(False)
@@ -4312,16 +4314,13 @@ class MainWindowModel(QObject):
         if label is not None:
             label.setText(f"Info  {msg}")
 
-    def _severity_done(self):
-        self._end_busy_task()
-        self._set_workflow_message("Severity scoring complete")
-        self.message_handler("Severity scoring complete")
-        if self.backend.get_severity_summary() is None:
+    def _on_severity_result_ready(self):
+        """Update all severity UI after scoring or CSV load. Backend must have severity_result set."""
+        if self.backend is None or not self.backend.has_severity_result():
             return
 
         scores_df = self.backend.severity_result.scores_df
 
-        # Filter to non-artifactual segments for summary stats
         clean_mask = [
             not self._severity_segment_is_artifactual(scores_df, idx)
             for idx in scores_df.index
@@ -4329,7 +4328,7 @@ class MainWindowModel(QObject):
         clean_df = scores_df[clean_mask]
 
         def _fmt(v):
-            return f"{v:.3f}" if v == v else "—"   # nan-safe
+            return f"{v:.3f}" if v == v else "—"
 
         if len(clean_df):
             peak_row = clean_df.loc[clean_df["score"].idxmax()]
@@ -4347,21 +4346,98 @@ class MainWindowModel(QObject):
             self.window.severity_peak_time_value.setText(
                 f"{peak_time:.1f} s" if peak_time == peak_time else "—")
 
-        for btn_attr in ("severity_export_button", "severity_jump_button", "severity_jump_clean_button", "severity_next_button"):
+        for btn_attr in ("severity_export_button", "severity_jump_button",
+                         "severity_jump_clean_button", "severity_next_button"):
             btn = getattr(self.window, btn_attr, None)
             if btn is not None:
                 btn.setEnabled(True)
 
         self._severity_rank = 0
         self._severity_sorted_idx = scores_df.sort_values("score", ascending=False).index.tolist()
-        # Pre-compute clean (non-artifactual) sorted index — used by navigation buttons
         self._severity_clean_rank = 0
-        self._severity_clean_sorted_idx = (
-            clean_df.sort_values("score", ascending=False).index.tolist()
-        )
+        self._severity_clean_sorted_idx = clean_df.sort_values("score", ascending=False).index.tolist()
 
+        self._update_severity_distribution_plot(scores_df)
         if hasattr(self.window, "waveform_plot"):
             self._reapply_severity_overlay()
+
+    def _update_severity_distribution_plot(self, scores_df):
+        dist_widget = getattr(self.window, "severity_dist_plot", None)
+        if dist_widget is None:
+            return
+        import pyqtgraph as pg
+        dist_widget.clear()
+        scores = scores_df["score"].to_numpy()
+        counts, edges = np.histogram(scores, bins=20, range=(0.0, 5.0))
+        counts = counts / float(counts.max()) if counts.max() > 0 else counts.astype(float)
+        bar_width = edges[1] - edges[0]
+        bar_colors = [self._severity_score_color(float(edges[i] + bar_width / 2)) for i in range(len(counts))]
+        for i, (count, left) in enumerate(zip(counts, edges[:-1])):
+            bar = pg.BarGraphItem(x=[left + bar_width / 2], height=[count],
+                                  width=bar_width * 0.9,
+                                  brush=bar_colors[i], pen=pg.mkPen(None))
+            dist_widget.addItem(bar)
+        dist_widget.setXRange(0, 5, padding=0)
+        dist_widget.setYRange(0, 1, padding=0.05)
+
+    def _severity_done(self):
+        self._end_busy_task()
+        self._set_workflow_message("Severity scoring complete")
+        self.message_handler("Severity scoring complete")
+        self._on_severity_result_ready()
+        self._auto_save_severity()
+
+    def _auto_save_severity(self):
+        try:
+            edf_path = getattr(self.backend, "edf_param", {}).get("edf_fn", None)
+            if not edf_path:
+                return
+            cache_path = str(Path(edf_path).with_suffix("")) + ".severity_scores.csv"
+            self.backend.export_severity_csv(cache_path)
+            self.message_handler(f"Severity scores cached to {Path(cache_path).name}")
+        except Exception:
+            pass
+
+    def _auto_load_severity_if_available(self):
+        try:
+            edf_path = getattr(self.backend, "edf_param", {}).get("edf_fn", None)
+            if not edf_path:
+                return
+            cache_path = str(Path(edf_path).with_suffix("")) + ".severity_scores.csv"
+            if not os.path.isfile(cache_path):
+                return
+            self._load_severity_from_path(cache_path)
+            self.message_handler(f"Severity scores loaded from cache ({Path(cache_path).name})")
+            self._set_workflow_message("Severity scores loaded from cache")
+        except Exception:
+            pass
+
+    def load_severity_scores(self):
+        from PyQt5.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self.window, "Load Severity Scores", "",
+            "CSV files (*.csv)")
+        if path:
+            self._load_severity_from_path(path)
+
+    def _load_severity_from_path(self, path: str):
+        import pandas as pd
+        from src.severity_app import SeverityResult
+        scores_df = pd.read_csv(path)
+        required = {"segment_idx", "start_sec", "end_sec", "score"}
+        if not required.issubset(scores_df.columns):
+            QMessageBox.warning(self.window, "Invalid File",
+                                "CSV must contain columns: segment_idx, start_sec, end_sec, score")
+            return
+        peak_idx = scores_df["score"].idxmax()
+        result = SeverityResult(
+            scores_df=scores_df,
+            mean_score=float(scores_df["score"].mean()),
+            peak_score=float(scores_df.loc[peak_idx, "score"]),
+            peak_time_sec=float(scores_df.loc[peak_idx, "start_sec"]),
+        )
+        self.backend.severity_result = result
+        self._on_severity_result_ready()
 
     def export_severity_csv(self):
         if not self.backend.has_severity_result():
@@ -5943,6 +6019,7 @@ class MainWindowModel(QObject):
         self.window.bipolar_button.setEnabled(True)
         self._set_workflow_message("EEG file loaded")
         self._sync_workspace_state()
+        QTimer.singleShot(0, self._auto_load_severity_if_available)
         eeg_type = getattr(self.backend, "eeg_type", None)
         if eeg_type and hasattr(self.window, "view"):
             needs_switch = eeg_type == "scalp" and self.biomarker_type in ("HFO", "Spike")
