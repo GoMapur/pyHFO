@@ -2266,6 +2266,10 @@ class MainWindowView(QObject):
         analysis_layout.addWidget(self.window.tabWidget, 1)
         stack.addWidget(analysis_page)
 
+        # inspector_container must be set before _build_severity_tab()
+        # because _wrap_inspector_section() reads it for widget parenting
+        self.window.inspector_container = analysis_page
+
         # Page 1: Severity — CBraMod scoring
         severity_page = self._build_severity_tab()
         stack.addWidget(severity_page)
@@ -2277,7 +2281,6 @@ class MainWindowView(QObject):
         dock.setWidget(content)
         self.window.addDockWidget(Qt.RightDockWidgetArea, dock)
         self.window.inspector_dock = dock
-        self.window.inspector_container = analysis_page
         self.window.inspector_seg_btn_analysis = btn_analysis
         self.window.inspector_seg_btn_severity = btn_severity
         self.window.inspector_stack = stack
@@ -3809,19 +3812,16 @@ class MainWindowView(QObject):
         placeholder.move(x_pos, y_pos)
 
     def eventFilter(self, obj, event):
-        try:
-            target = getattr(self, "_placeholder_target", None)
-            if obj is target and event.type() in {QEvent.Resize, QEvent.Show}:
-                QtCore.QTimer.singleShot(0, self._reposition_waveform_placeholder)
-            window = getattr(self, "window", None)
-            toolbar = getattr(window, "waveform_toolbar_frame", None) if window is not None else None
-            if obj is toolbar and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
-                self._lock_waveform_toolbar_button_widths()
-            image_label = getattr(window, "image_label", None) if window is not None else None
-            if obj is image_label and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
-                QtCore.QTimer.singleShot(0, self._refresh_hub_model_banner)
-        except RuntimeError:
-            pass
+        target = getattr(self, "_placeholder_target", None)
+        if obj is target and event.type() in {QEvent.Resize, QEvent.Show}:
+            QtCore.QTimer.singleShot(0, self._reposition_waveform_placeholder)
+        window = getattr(self, "window", None)
+        toolbar = getattr(window, "waveform_toolbar_frame", None) if window is not None else None
+        if obj is toolbar and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
+            self._lock_waveform_toolbar_button_widths()
+        image_label = getattr(window, "image_label", None) if window is not None else None
+        if obj is image_label and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
+            QtCore.QTimer.singleShot(0, self._refresh_hub_model_banner)
         return super(MainWindowView, self).eventFilter(obj, event)
 
     def _build_workflow_header(self):
