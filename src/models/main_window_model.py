@@ -4277,27 +4277,42 @@ class MainWindowModel(QObject):
         self._end_busy_task()
         self._set_workflow_message("Severity scoring complete")
         self.message_handler("Severity scoring complete")
-        summary = self.backend.get_severity_summary()
-        if summary is None:
+        if self.backend.get_severity_summary() is None:
             return
+
+        scores_df = self.backend.severity_result.scores_df
+
+        # Filter to non-artifactual segments for summary stats
+        clean_mask = [
+            not self._severity_segment_is_artifactual(scores_df, idx)
+            for idx in scores_df.index
+        ]
+        clean_df = scores_df[clean_mask]
 
         def _fmt(v):
             return f"{v:.3f}" if v == v else "—"   # nan-safe
 
+        if len(clean_df):
+            peak_row = clean_df.loc[clean_df["score"].idxmax()]
+            mean_score = float(clean_df["score"].mean())
+            peak_score = float(peak_row["score"])
+            peak_time  = float(peak_row["start_sec"])
+        else:
+            mean_score = peak_score = peak_time = float("nan")
+
         if hasattr(self.window, "severity_mean_value"):
-            self.window.severity_mean_value.setText(_fmt(summary["mean_score"]))
+            self.window.severity_mean_value.setText(_fmt(mean_score))
         if hasattr(self.window, "severity_peak_value"):
-            self.window.severity_peak_value.setText(_fmt(summary["peak_score"]))
+            self.window.severity_peak_value.setText(_fmt(peak_score))
         if hasattr(self.window, "severity_peak_time_value"):
-            t = summary["peak_time_sec"]
             self.window.severity_peak_time_value.setText(
-                f"{t:.1f} s" if t == t else "—")
+                f"{peak_time:.1f} s" if peak_time == peak_time else "—")
+
         for btn_attr in ("severity_export_button", "severity_jump_button", "severity_jump_clean_button", "severity_next_button"):
             btn = getattr(self.window, btn_attr, None)
             if btn is not None:
                 btn.setEnabled(True)
 
-        scores_df = self.backend.severity_result.scores_df
         self._severity_rank = 0
         self._severity_sorted_idx = scores_df.sort_values("score", ascending=False).index.tolist()
 
