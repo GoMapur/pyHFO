@@ -4259,6 +4259,7 @@ class MainWindowModel(QObject):
         self._severity_sorted_idx = []
         self._severity_clean_rank = 0
         self._severity_clean_sorted_idx = []
+        self._severity_plot_buckets = None
         for attr in ("severity_mean_value", "severity_peak_value", "severity_peak_time_value"):
             lbl = getattr(self.window, attr, None)
             if lbl is not None:
@@ -4276,36 +4277,38 @@ class MainWindowModel(QObject):
     def _reapply_severity_overlay(self):
         if not hasattr(self.window, "waveform_plot"):
             return
-        if self.backend is None or not getattr(self.backend, "has_severity_result", lambda: False)():
-            return
-        scores_df = self.backend.severity_result.scores_df
-        if scores_df is None or len(scores_df) == 0:
+        buckets = getattr(self, "_severity_plot_buckets", None)
+        if not buckets:
             self._update_severity_window_list()
             return
-
-        # Batch by color bucket (10 buckets) — reduces N pyqtgraph items to ≤10
         import pyqtgraph as pg
-        buckets: dict = {}
-        for _, row in scores_df.iterrows():
-            score = float(row["score"])
-            bucket = round(score * 2) / 2          # quantise to 0.5 steps → 11 buckets max
-            color = self._severity_score_color(bucket)
-            if color not in buckets:
-                buckets[color] = ([], [])
-            xs, ys = buckets[color]
-            xs += [float(row["start_sec"]), float(row["end_sec"]), float("nan")]
-            ys += [score, score, float("nan")]
-
         plot_widget = self.window.waveform_plot.mini_plot_controller.view.plot_widget
         for color, (xs, ys) in buckets.items():
-            plot_widget.plot(
-                np.array(xs, dtype=float),
-                np.array(ys, dtype=float),
-                pen=pg.mkPen(color=color, width=2),
-                connect="finite",
-            )
+            plot_widget.plot(xs, ys, pen=pg.mkPen(color=color, width=2), connect="finite")
         self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
+
+    def _build_severity_plot_buckets(self, scores_df) -> dict:
+        """Pre-compute nan-connected arrays grouped by color bucket. Fully vectorised."""
+        starts  = scores_df["start_sec"].to_numpy(dtype=float)
+        ends    = scores_df["end_sec"].to_numpy(dtype=float)
+        scores  = scores_df["score"].to_numpy(dtype=float)
+        buckets_q = np.round(scores * 2) / 2      # quantise to 0.5 steps
+
+        nan_col = np.full(len(scores), np.nan)
+        # xs: [s0, e0, nan, s1, e1, nan, ...] per segment
+        xs_all = np.column_stack([starts, ends, nan_col]).ravel()
+        # ys: [score, score, nan, ...]
+        ys_all = np.column_stack([scores, scores, nan_col]).ravel()
+
+        result = {}
+        for bucket_val in np.unique(buckets_q):
+            mask = buckets_q == bucket_val
+            # Replicate mask 3× (start, end, nan) to align with the interleaved arrays
+            mask3 = np.repeat(mask, 3)
+            color = self._severity_score_color(float(bucket_val))
+            result[color] = (xs_all[mask3].copy(), ys_all[mask3].copy())
+        return result
 
     def _severity_progress(self, pct: int):
         msg = f"Severity scoring... {pct}%"
@@ -4357,6 +4360,7 @@ class MainWindowModel(QObject):
         self._severity_clean_rank = 0
         self._severity_clean_sorted_idx = clean_df.sort_values("score", ascending=False).index.tolist()
 
+        self._severity_plot_buckets = self._build_severity_plot_buckets(scores_df)
         self._update_severity_distribution_plot(scores_df)
         if hasattr(self.window, "waveform_plot"):
             self._reapply_severity_overlay()
