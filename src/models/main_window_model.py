@@ -4312,20 +4312,16 @@ class MainWindowModel(QObject):
 
         scores_df = self.backend.severity_result.scores_df
 
-        clean_mask = [
-            not self._severity_segment_is_artifactual(scores_df, idx)
-            for idx in scores_df.index
-        ]
-        clean_df = scores_df[clean_mask]
+        clean_df = self._compute_clean_df(scores_df)
 
         def _fmt(v):
             return f"{v:.3f}" if v == v else "—"
 
         if len(clean_df):
-            peak_row = clean_df.loc[clean_df["score"].idxmax()]
+            peak_idx   = clean_df["score"].idxmax()
             mean_score = float(clean_df["score"].mean())
-            peak_score = float(peak_row["score"])
-            peak_time  = float(peak_row["start_sec"])
+            peak_score = float(clean_df.loc[peak_idx, "score"])
+            peak_time  = float(clean_df.loc[peak_idx, "start_sec"])
         else:
             mean_score = peak_score = peak_time = float("nan")
 
@@ -4343,10 +4339,12 @@ class MainWindowModel(QObject):
             if btn is not None:
                 btn.setEnabled(True)
 
+        sorted_all   = scores_df.sort_values("score", ascending=False)
+        sorted_clean = clean_df.sort_values("score", ascending=False)
         self._severity_rank = 0
-        self._severity_sorted_idx = scores_df.sort_values("score", ascending=False).index.tolist()
+        self._severity_sorted_idx       = sorted_all.index.tolist()
         self._severity_clean_rank = 0
-        self._severity_clean_sorted_idx = clean_df.sort_values("score", ascending=False).index.tolist()
+        self._severity_clean_sorted_idx = sorted_clean.index.tolist()
 
         self._severity_plot_arrays = self._build_severity_plot_arrays(scores_df)
         self._update_severity_distribution_plot(scores_df)
@@ -4468,6 +4466,27 @@ class MainWindowModel(QObject):
             return
         self._severity_clean_rank = 0
         self._severity_navigate_to_clean_rank()
+
+    def _compute_clean_df(self, scores_df, threshold_uv: float = 1000.0):
+        """Return sub-df of non-artifactual segments using vectorised numpy."""
+        try:
+            from src.severity_app import TUEG_19, _clean_ch
+            tueg_set = set(TUEG_19)
+            eeg_rows = [i for i, ch in enumerate(self.backend.channel_names)
+                        if _clean_ch(str(ch)) in tueg_set]
+            if not eeg_rows:
+                return scores_df.copy()
+            fs = self.backend.sample_freq
+            eeg = self.backend.eeg_data[eeg_rows, :]          # (n_eeg, total_samples)
+            starts = (scores_df["start_sec"].to_numpy() * fs).astype(int)
+            ends   = (scores_df["end_sec"].to_numpy()   * fs).astype(int)
+            clean_mask = np.array([
+                float(np.abs(eeg[:, s:e]).max()) < threshold_uv
+                for s, e in zip(starts, ends)
+            ], dtype=bool)
+            return scores_df[clean_mask]
+        except Exception:
+            return scores_df.copy()
 
     def _severity_segment_is_artifactual(self, scores_df, row_idx, threshold_uv: float = 1000.0) -> bool:
         """Return True if any TUEG-19 EEG channel in the segment exceeds threshold_uv."""
