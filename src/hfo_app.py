@@ -67,6 +67,11 @@ class HFO_App(object):
         self.param_filter = None
         self.filtered = False
 
+        ## severity scoring related
+        self._severity_scorer = None
+        self._severity_model_dir = None
+        self.severity_result = None
+
         #60Hz filter related
         self.eeg_data_un60 = None
         self.filter_data_un60 = None
@@ -633,7 +638,7 @@ class HFO_App(object):
         self.sync_active_run()
 
     '''
-        results APIs 
+        results APIs
     '''
 
     def get_res_overview(self):
@@ -648,6 +653,60 @@ class HFO_App(object):
             "n_real": self.event_features.num_real,
             "n_spike": self.event_features.num_spike
         }
+
+    '''
+        Severity scoring APIs
+    '''
+
+    @staticmethod
+    def default_severity_model_dir():
+        return str(Path(os.path.dirname(__file__)).parent / "ckpt" / "severity_model")
+
+    def run_severity_scoring(self, model_dir: str = None):
+        '''
+        Score the loaded recording using the BASED severity model.
+
+        model_dir: path to the HF directory produced by convert_checkpoint.py.
+                   Defaults to ckpt/severity_model/ bundled with the app.
+        Returns a SeverityResult (also stored as self.severity_result).
+        '''
+        from src.severity_app import SeverityScorer
+
+        if model_dir is None:
+            model_dir = self.default_severity_model_dir()
+
+        if self.eeg_data is None or self.channel_names is None:
+            raise ValueError("Load an EEG recording before running severity scoring.")
+
+        if self._severity_scorer is None or self._severity_model_dir != model_dir:
+            self._severity_scorer = SeverityScorer(model_dir)
+            self._severity_model_dir = model_dir
+
+        self.severity_result = self._severity_scorer.run(
+            self.eeg_data, self.channel_names, self.sample_freq
+        )
+        return self.severity_result
+
+    def export_severity_csv(self, path: str):
+        '''Export per-segment severity scores to a CSV file.'''
+        if self.severity_result is None:
+            raise ValueError("Run severity scoring first.")
+        self._severity_scorer.export_csv(self.severity_result, path)
+
+    def get_severity_summary(self):
+        '''Return dict with mean, peak, peak_time or None if not yet scored.'''
+        if self.severity_result is None:
+            return None
+        r = self.severity_result
+        return {
+            'mean_score':    r.mean_score,
+            'peak_score':    r.peak_score,
+            'peak_time_sec': r.peak_time_sec,
+            'n_segments':    len(r.scores_df),
+        }
+
+    def has_severity_result(self):
+        return self.severity_result is not None
 
     def export_report(self, path):
         if not self.event_features:

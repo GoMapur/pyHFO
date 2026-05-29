@@ -3086,6 +3086,13 @@ class MainWindowModel(QObject):
             safe_connect_signal_slot(self.window.run_stats_export_button.clicked, self.save_to_excel)
         if hasattr(self.window, "run_stats_report_button"):
             safe_connect_signal_slot(self.window.run_stats_report_button.clicked, self.save_analysis_report)
+
+        # severity scoring
+        if hasattr(self.window, "severity_run_button"):
+            safe_connect_signal_slot(self.window.severity_run_button.clicked, self.run_severity_scoring)
+        if hasattr(self.window, "severity_export_button"):
+            safe_connect_signal_slot(self.window.severity_export_button.clicked, self.export_severity_csv)
+
         self.window.switch_run_button.setEnabled(False)
         self.window.accept_run_button.setEnabled(False)
         self.window.compare_runs_button.setEnabled(False)
@@ -4196,6 +4203,60 @@ class MainWindowModel(QObject):
         except Exception as exc:
             QMessageBox.critical(self.window, "Classifier Setup Failed", str(exc))
             return False
+
+    # ── severity scoring ──────────────────────────────────────────────────────
+
+    def run_severity_scoring(self):
+        if self.backend is None or self.backend.eeg_data is None:
+            QMessageBox.information(self.window, "No Recording",
+                                    "Load an EEG recording before running severity scoring.")
+            return
+
+        model_dir = getattr(self.window, "_severity_model_dir", None)
+        if not model_dir:
+            model_dir = self.backend.default_severity_model_dir()
+
+        btn = getattr(self.window, "severity_run_button", None)
+        if btn is not None:
+            btn.setEnabled(False)
+
+        worker = Worker(lambda: self.backend.run_severity_scoring(model_dir))
+        self._connect_worker(
+            worker, "Severity scoring",
+            result_handler=lambda _: self._severity_done(),
+            finished_handler=lambda: btn.setEnabled(True) if btn else None,
+        )
+
+    def _severity_done(self):
+        summary = self.backend.get_severity_summary()
+        if summary is None:
+            return
+
+        def _fmt(v):
+            return f"{v:.3f}" if v == v else "—"   # nan-safe
+
+        if hasattr(self.window, "severity_mean_value"):
+            self.window.severity_mean_value.setText(_fmt(summary["mean_score"]))
+        if hasattr(self.window, "severity_peak_value"):
+            self.window.severity_peak_value.setText(_fmt(summary["peak_score"]))
+        if hasattr(self.window, "severity_peak_time_value"):
+            t = summary["peak_time_sec"]
+            self.window.severity_peak_time_value.setText(
+                f"{t:.1f} s" if t == t else "—")
+        if hasattr(self.window, "severity_export_button"):
+            self.window.severity_export_button.setEnabled(True)
+
+    def export_severity_csv(self):
+        if not self.backend.has_severity_result():
+            return
+        from PyQt5.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self.window, "Export severity scores", "severity_scores.csv",
+            "CSV files (*.csv)")
+        if path:
+            self.backend.export_severity_csv(path)
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     def run_classifier_workflow(self):
         if not self.biomarker_supports_classification():
