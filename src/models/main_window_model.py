@@ -1288,6 +1288,24 @@ class MainWindowModel(QObject):
                 tooltip=tool_payload["tooltip"],
             )
 
+        if hasattr(self.window, "eeg_type_badge"):
+            eeg_type = getattr(self.backend, "eeg_type", None) if self.backend is not None else None
+            badge = self.window.eeg_type_badge
+            if has_recording and eeg_type:
+                label = "Scalp EEG" if eeg_type == "scalp" else "iEEG"
+                tooltip = "Scalp EEG detected — spindle detection available." if eeg_type == "scalp" else "Intracranial EEG detected — HFO, spike, and spindle detection available."
+                badge.setText(label)
+                badge.setToolTip(tooltip)
+                badge.setProperty("eegType", eeg_type)
+                badge.style().unpolish(badge)
+                badge.style().polish(badge)
+                badge.setVisible(True)
+            else:
+                badge.setVisible(False)
+                badge.setProperty("eegType", "")
+                badge.style().unpolish(badge)
+                badge.style().polish(badge)
+
         if hasattr(self.window, "waveform_reset_view_button"):
             reset_available = bool(
                 has_recording
@@ -5382,6 +5400,9 @@ class MainWindowModel(QObject):
         self.update_status_indicators()
         self.update_decision_overview()
         self._sync_workspace_state()
+        eeg_type = getattr(self.backend, "eeg_type", None)
+        if eeg_type and hasattr(self.window, "view"):
+            self.window.view.apply_eeg_type_ui_state(eeg_type, self.biomarker_type)
 
     def _refresh_recording_metadata_ui(self, results):
         previous = self._suspend_default_configuration
@@ -5628,6 +5649,14 @@ class MainWindowModel(QObject):
         self.window.bipolar_button.setEnabled(True)
         self._set_workflow_message("EEG file loaded")
         self._sync_workspace_state()
+        eeg_type = getattr(self.backend, "eeg_type", None)
+        if eeg_type and hasattr(self.window, "view"):
+            needs_switch = eeg_type == "scalp" and self.biomarker_type in ("HFO", "Spike")
+            self.window.view.apply_eeg_type_ui_state(eeg_type, self.biomarker_type)
+            if needs_switch:
+                combo = getattr(self.window, "combo_box_biomarker", None)
+                if combo is not None:
+                    QTimer.singleShot(0, lambda: combo.currentIndexChanged.emit(combo.currentIndex()))
         self._apply_backend_defaults_if_needed()
         if getattr(self.backend, "param_filter", None) is not None:
             self._sync_filter_inputs_from_param(self.backend.param_filter)
@@ -6705,6 +6734,8 @@ class MainWindowModel(QObject):
         self.close_other_window()
         # self.backend = HFO_App()
         self.set_biomarker_type_and_init_backend(self.biomarker_type)
+        if hasattr(self.window, "view"):
+            self.window.view.apply_eeg_type_ui_state("ieeg", self.biomarker_type)
         if hasattr(self.window, "waveform_plot"):
             self.window.waveform_plot.update_backend(self.backend, False)
         self.window.main_filename.setText("")

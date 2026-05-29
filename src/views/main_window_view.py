@@ -790,6 +790,16 @@ class MainWindowView(QObject):
                 background: #f8fafc;
                 border-color: #e2e8ee;
             }
+            QLabel[waveformBadge="true"][eegType="scalp"] {
+                color: #276740;
+                background: #eaf6ee;
+                border-color: #a3d4b0;
+            }
+            QLabel[waveformBadge="true"][eegType="ieeg"] {
+                color: #5b2d91;
+                background: #f3edfb;
+                border-color: #c9a8e8;
+            }
             QLabel[waveformKeyLabel="true"] {
                 color: #506474;
                 background: #edf2f6;
@@ -1710,6 +1720,11 @@ class MainWindowView(QObject):
         self.window.waveform_tool_mode_badge = QLabel("Tool --", mode_frame)
         self.window.waveform_tool_mode_badge.setProperty("waveformBadge", True)
         mode_layout.addWidget(self.window.waveform_tool_mode_badge, 0, Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.window.eeg_type_badge = QLabel("", mode_frame)
+        self.window.eeg_type_badge.setProperty("waveformBadge", True)
+        self.window.eeg_type_badge.setVisible(False)
+        mode_layout.addWidget(self.window.eeg_type_badge, 0, Qt.AlignLeft | Qt.AlignVCenter)
 
         mode_layout.addStretch(1)
 
@@ -4226,6 +4241,32 @@ class MainWindowView(QObject):
 
     def get_biomarker_type(self):
         return self.window.combo_box_biomarker.currentText()
+
+    _BIOMARKER_ITEMS = ["HFO", "Spindle", "Spike"]
+    _SCALP_BIOMARKER_ITEMS = ["Spindle"]
+
+    def apply_eeg_type_ui_state(self, eeg_type, biomarker_type=None):
+        is_scalp = eeg_type == "scalp"
+
+        # Classification: always hidden for scalp EEG (all classifiers are iEEG-only)
+        classification_body = self._inspector_section_roots.get("CLASSIFICATION")
+        if classification_body is not None:
+            wrapper = classification_body.parent()
+            if wrapper is not None:
+                wrapper.setVisible(not is_scalp)
+
+        # Rebuild biomarker combo to only show valid options for eeg_type
+        combo = getattr(self.window, "combo_box_biomarker", None)
+        if combo is not None:
+            items = self._SCALP_BIOMARKER_ITEMS if is_scalp else self._BIOMARKER_ITEMS
+            current = combo.currentText()
+            blocker = QtCore.QSignalBlocker(combo)
+            combo.clear()
+            for item in items:
+                combo.addItem(item)
+            restore_idx = combo.findText(current)
+            combo.setCurrentIndex(restore_idx if restore_idx >= 0 else 0)
+            del blocker
 
     def create_stacked_widget_detection_param(self, biomarker_type='HFO'):
         if biomarker_type == 'HFO':

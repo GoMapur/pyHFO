@@ -23,6 +23,7 @@ from src.utils.utils_montage import (
     get_average_reference_metadata,
     infer_auto_bipolar_montage_metadata,
     infer_auto_bipolar_montage_entries,
+    infer_eeg_type,
     source_channel_names,
 )
 from src.utils.utils_plotting import plot_feature
@@ -114,6 +115,7 @@ class HFO_App(object):
         self.recording_channel_names = np.array(self.channel_names).copy()
         self.eeg_data_un60 = self.eeg_data
         self.eeg_data_60 = None
+        self.eeg_type = infer_eeg_type(self.channel_names)
         self.analysis_session = AnalysisSession(self.biomarker_type)
         return self
 
