@@ -4245,6 +4245,7 @@ class MainWindowModel(QObject):
         scores_df = self.backend.severity_result.scores_df
         if scores_df is not None and len(scores_df):
             self.window.waveform_plot.plot_severity_scores(scores_df)
+            self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
 
     def _severity_progress(self, pct: int):

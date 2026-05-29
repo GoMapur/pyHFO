@@ -88,7 +88,6 @@ class MiniPlotView(QtWidgets.QGraphicsView):
                 pen=pg.mkPen(color=color, width=width),
             )
             self._severity_items.append(item)
-        self.plot_widget.setYRange(0, 5, padding=0.05)
 
     @staticmethod
     def _severity_score_color(score: float) -> str:
