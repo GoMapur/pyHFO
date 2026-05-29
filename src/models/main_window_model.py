@@ -3096,6 +3096,8 @@ class MainWindowModel(QObject):
             safe_connect_signal_slot(self.window.severity_export_button.clicked, self.export_severity_csv)
         if hasattr(self.window, "severity_jump_button"):
             safe_connect_signal_slot(self.window.severity_jump_button.clicked, self.severity_jump_to_most_severe)
+        if hasattr(self.window, "severity_jump_clean_button"):
+            safe_connect_signal_slot(self.window.severity_jump_clean_button.clicked, self.severity_jump_to_most_severe_non_artifactual)
         if hasattr(self.window, "severity_next_button"):
             safe_connect_signal_slot(self.window.severity_next_button.clicked, self.severity_jump_to_next_severe)
 
@@ -4260,7 +4262,7 @@ class MainWindowModel(QObject):
             t = summary["peak_time_sec"]
             self.window.severity_peak_time_value.setText(
                 f"{t:.1f} s" if t == t else "—")
-        for btn_attr in ("severity_export_button", "severity_jump_button", "severity_next_button"):
+        for btn_attr in ("severity_export_button", "severity_jump_button", "severity_jump_clean_button", "severity_next_button"):
             btn = getattr(self.window, btn_attr, None)
             if btn is not None:
                 btn.setEnabled(True)
@@ -4302,6 +4304,32 @@ class MainWindowModel(QObject):
             return
         self._severity_rank = 0
         self._severity_navigate_to_rank()
+
+    def severity_jump_to_most_severe_non_artifactual(self):
+        if not self.backend or not self.backend.has_severity_result():
+            return
+        sorted_idx = getattr(self, "_severity_sorted_idx", [])
+        scores_df = self.backend.severity_result.scores_df
+        for rank, row_idx in enumerate(sorted_idx):
+            if not self._severity_segment_is_artifactual(scores_df, row_idx):
+                self._severity_rank = rank
+                self._severity_navigate_to_rank()
+                return
+        self._set_workflow_message("All segments exceed the 1000 µV artifact threshold")
+
+    def _severity_segment_is_artifactual(self, scores_df, row_idx, threshold_uv: float = 1000.0) -> bool:
+        """Return True if the segment's raw EEG has any channel exceeding threshold_uv."""
+        import numpy as np
+        try:
+            start_sec = float(scores_df.loc[row_idx, "start_sec"])
+            end_sec = float(scores_df.loc[row_idx, "end_sec"])
+            fs = self.backend.sample_freq
+            s0 = int(start_sec * fs)
+            s1 = int(end_sec * fs)
+            segment = self.backend.eeg_data[:, s0:s1]
+            return float(np.abs(segment).max()) >= threshold_uv
+        except Exception:
+            return False
 
     def severity_jump_to_next_severe(self):
         if not self.backend or not self.backend.has_severity_result():

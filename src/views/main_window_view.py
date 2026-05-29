@@ -2357,6 +2357,11 @@ class MainWindowView(QObject):
         self.window.severity_jump_button.setToolTip("Jump to the highest severity segment in the recording")
         self.window.severity_jump_button.setEnabled(False)
 
+        self.window.severity_jump_clean_button = QPushButton("Jump to Most Severe Non-Artifactual")
+        self.window.severity_jump_clean_button.setProperty("inspectorPrimary", True)
+        self.window.severity_jump_clean_button.setToolTip("Jump to the highest severity segment where max |voltage| < 1000 µV")
+        self.window.severity_jump_clean_button.setEnabled(False)
+
         self.window.severity_next_button = QPushButton("Next Most Severe →")
         self.window.severity_next_button.setProperty("inspectorPrimary", True)
         self.window.severity_next_button.setToolTip("Jump to the next most severe segment")
@@ -2366,6 +2371,7 @@ class MainWindowView(QObject):
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(3)
         nav_layout.addWidget(self.window.severity_jump_button)
+        nav_layout.addWidget(self.window.severity_jump_clean_button)
         nav_layout.addWidget(self.window.severity_next_button)
         results_outer.addLayout(nav_layout)
 
