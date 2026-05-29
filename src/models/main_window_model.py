@@ -5,6 +5,7 @@ import tempfile
 from datetime import datetime
 import math
 import json
+import numpy as np
 
 from PyQt5 import uic
 from PyQt5.QtGui import *
@@ -4319,7 +4320,6 @@ class MainWindowModel(QObject):
 
     def _severity_segment_is_artifactual(self, scores_df, row_idx, threshold_uv: float = 1000.0) -> bool:
         """Return True if the segment's raw EEG has any channel exceeding threshold_uv."""
-        import numpy as np
         try:
             start_sec = float(scores_df.loc[row_idx, "start_sec"])
             end_sec = float(scores_df.loc[row_idx, "end_sec"])
@@ -6161,7 +6161,6 @@ class MainWindowModel(QObject):
     def _ensure_prediction_arrays_are_sized(self):
         """Ensure prediction arrays have the same size as the number of detected events"""
         if self.backend.detected and self.backend.event_features:
-            import numpy as np
             num_events = len(self.backend.event_features.starts)
             
             # Fix spike_predictions array if it's empty
