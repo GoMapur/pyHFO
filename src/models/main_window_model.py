@@ -4256,10 +4256,11 @@ class MainWindowModel(QObject):
 
     def _clear_severity_state(self):
         self._severity_rank = 0
-        self._severity_sorted_idx = []
         self._severity_clean_rank = 0
-        self._severity_clean_sorted_idx = []
-        self._severity_plot_arrays = None
+        self._severity_df_time = None
+        self._severity_df_clean_time = None
+        self._severity_df_sorted = None
+        self._severity_df_clean_sorted = None
         for attr in ("severity_mean_value", "severity_peak_value", "severity_peak_time_value"):
             lbl = getattr(self.window, attr, None)
             if lbl is not None:
@@ -4277,26 +4278,21 @@ class MainWindowModel(QObject):
     def _reapply_severity_overlay(self):
         if not hasattr(self.window, "waveform_plot"):
             return
-        arrays = getattr(self, "_severity_plot_arrays", None)
-        if arrays is None:
+        df = getattr(self, "_severity_df_time", None)
+        if df is None or len(df) == 0:
             self._update_severity_window_list()
             return
         import pyqtgraph as pg
-        xs, ys = arrays
+        starts  = df["start_sec"].to_numpy(dtype=float)
+        ends    = df["end_sec"].to_numpy(dtype=float)
+        scores  = df["score"].to_numpy(dtype=float)
+        nan_col = np.full(len(df), np.nan)
+        xs = np.column_stack([starts, ends, nan_col]).ravel()
+        ys = np.column_stack([scores, scores, nan_col]).ravel()
         plot_widget = self.window.waveform_plot.mini_plot_controller.view.plot_widget
         plot_widget.plot(xs, ys, pen=pg.mkPen("#355c72", width=2), connect="finite")
         self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
-
-    def _build_severity_plot_arrays(self, scores_df):
-        """Pre-compute (xs, ys) nan-connected arrays for the mini-bar overlay."""
-        starts  = scores_df["start_sec"].to_numpy(dtype=float)
-        ends    = scores_df["end_sec"].to_numpy(dtype=float)
-        scores  = scores_df["score"].to_numpy(dtype=float)
-        nan_col = np.full(len(scores), np.nan)
-        xs = np.column_stack([starts, ends, nan_col]).ravel()
-        ys = np.column_stack([scores, scores, nan_col]).ravel()
-        return xs, ys
 
     def _severity_progress(self, pct: int):
         msg = f"Severity scoring... {pct}%"
@@ -4339,15 +4335,13 @@ class MainWindowModel(QObject):
             if btn is not None:
                 btn.setEnabled(True)
 
-        sorted_all   = scores_df.sort_values("score", ascending=False)
-        sorted_clean = clean_df.sort_values("score", ascending=False)
+        self._severity_df_time         = scores_df.sort_values("start_sec").reset_index(drop=True)
+        self._severity_df_clean_time   = clean_df.sort_values("start_sec").reset_index(drop=True)
+        self._severity_df_sorted       = scores_df.sort_values("score", ascending=False).reset_index(drop=True)
+        self._severity_df_clean_sorted = clean_df.sort_values("score", ascending=False).reset_index(drop=True)
         self._severity_rank = 0
-        self._severity_sorted_idx       = sorted_all.index.tolist()
         self._severity_clean_rank = 0
-        self._severity_clean_sorted_idx = sorted_clean.index.tolist()
-
-        self._severity_plot_arrays = self._build_severity_plot_arrays(scores_df)
-        self._update_severity_distribution_plot(scores_df)
+        self._update_severity_distribution_plot(self._severity_df_time)
         if hasattr(self.window, "waveform_plot"):
             self._reapply_severity_overlay()
 
@@ -4460,8 +4454,8 @@ class MainWindowModel(QObject):
     def severity_jump_to_most_severe_non_artifactual(self):
         if not self.backend or not self.backend.has_severity_result():
             return
-        clean_idx = getattr(self, "_severity_clean_sorted_idx", [])
-        if not clean_idx:
+        df = getattr(self, "_severity_df_clean_sorted", None)
+        if df is None or len(df) == 0:
             self._set_workflow_message("All segments exceed the 1000 µV artifact threshold")
             return
         self._severity_clean_rank = 0
@@ -4512,68 +4506,50 @@ class MainWindowModel(QObject):
     def severity_jump_to_next_severe(self):
         if not self.backend or not self.backend.has_severity_result():
             return
-        clean_idx = getattr(self, "_severity_clean_sorted_idx", [])
-        next_rank = getattr(self, "_severity_clean_rank", 0) + 1
-        if next_rank >= len(clean_idx):
+        df = getattr(self, "_severity_df_clean_sorted", None)
+        next_rank = self._severity_clean_rank + 1
+        if df is None or next_rank >= len(df):
             self._set_workflow_message("No more non-artifactual segments")
             return
         self._severity_clean_rank = next_rank
         self._severity_navigate_to_clean_rank()
 
     def _severity_navigate_to_rank(self):
-        sorted_idx = getattr(self, "_severity_sorted_idx", [])
-        if not sorted_idx:
+        df = getattr(self, "_severity_df_sorted", None)
+        if df is None or len(df) == 0:
             return
-        rank = getattr(self, "_severity_rank", 0)
-        row_idx = sorted_idx[rank]
-        scores_df = self.backend.severity_result.scores_df
-        start_sec = float(scores_df.loc[row_idx, "start_sec"])
-        score = float(scores_df.loc[row_idx, "score"])
-        n = len(sorted_idx)
-        self._set_workflow_message(f"Severity rank {rank + 1}/{n} — score {score:.3f} at {start_sec:.1f} s")
-        self._severity_jump_to_time(start_sec)
+        row = df.iloc[self._severity_rank]
+        self._set_workflow_message(
+            f"Severity rank {self._severity_rank + 1}/{len(df)} — score {row['score']:.3f} at {row['start_sec']:.1f} s")
+        self._severity_jump_to_time(float(row["start_sec"]))
 
     def _severity_navigate_to_clean_rank(self):
-        clean_idx = getattr(self, "_severity_clean_sorted_idx", [])
-        if not clean_idx:
+        df = getattr(self, "_severity_df_clean_sorted", None)
+        if df is None or len(df) == 0:
             return
-        rank = getattr(self, "_severity_clean_rank", 0)
-        row_idx = clean_idx[rank]
-        scores_df = self.backend.severity_result.scores_df
-        start_sec = float(scores_df.loc[row_idx, "start_sec"])
-        score = float(scores_df.loc[row_idx, "score"])
-        n = len(clean_idx)
-        self._set_workflow_message(f"Non-artifactual rank {rank + 1}/{n} — score {score:.3f} at {start_sec:.1f} s")
-        self._severity_jump_to_time(start_sec)
+        row = df.iloc[self._severity_clean_rank]
+        self._set_workflow_message(
+            f"Non-artifactual rank {self._severity_clean_rank + 1}/{len(df)} — score {row['score']:.3f} at {row['start_sec']:.1f} s")
+        self._severity_jump_to_time(float(row["start_sec"]))
 
     def _update_severity_window_list(self):
         list_widget = getattr(self.window, "severity_window_list", None)
         if list_widget is None:
             return
-        if not self.backend or not self.backend.has_severity_result():
+        df = getattr(self, "_severity_df_time", None)
+        if df is None or len(df) == 0:
             list_widget.clear()
             return
-        scores_df = self.backend.severity_result.scores_df
-        if scores_df is None or len(scores_df) == 0:
-            list_widget.clear()
-            return
-
-        # Get current view window
         try:
             t_start = float(self.window.waveform_plot.t_start)
             t_end = t_start + float(self.window.display_time_window_input.value())
         except Exception:
             list_widget.clear()
             return
-
-        # Find all segments that overlap the current view (including partials)
-        overlap = scores_df[
-            (scores_df["end_sec"] > t_start) & (scores_df["start_sec"] < t_end)
-        ].copy()
-
+        overlap = df[(df["end_sec"] > t_start) & (df["start_sec"] < t_end)]
         list_widget.clear()
-        for _, row in overlap.iterrows():
-            label = f"{row['start_sec']:.0f}s – {row['end_sec']:.0f}s   {row['score']:.3f}"
+        for label in (f"{r.start_sec:.0f}s – {r.end_sec:.0f}s   {r.score:.3f}"
+                      for r in overlap.itertuples(index=False)):
             list_widget.addItem(label)
 
     # ─────────────────────────────────────────────────────────────────────────
