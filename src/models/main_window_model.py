@@ -4252,6 +4252,23 @@ class MainWindowModel(QObject):
             b = int(59  + t * (54  - 59))
         return f"#{r:02x}{g:02x}{b:02x}"
 
+    def _clear_severity_state(self):
+        self._severity_rank = 0
+        self._severity_sorted_idx = []
+        for attr in ("severity_mean_value", "severity_peak_value", "severity_peak_time_value"):
+            lbl = getattr(self.window, attr, None)
+            if lbl is not None:
+                lbl.setText("--")
+        for attr in ("severity_jump_button", "severity_jump_clean_button", "severity_next_button", "severity_export_button"):
+            btn = getattr(self.window, attr, None)
+            if btn is not None:
+                btn.setEnabled(False)
+        lst = getattr(self.window, "severity_window_list", None)
+        if lst is not None:
+            lst.clear()
+        if hasattr(self.window, "waveform_plot"):
+            self.window.waveform_plot.mini_plot_controller.view.clear()
+
     def _reapply_severity_overlay(self):
         if not hasattr(self.window, "waveform_plot"):
             return
@@ -6977,6 +6994,7 @@ class MainWindowModel(QObject):
         self.set_biomarker_type_and_init_backend(self.biomarker_type)
         if hasattr(self.window, "view"):
             self.window.view.apply_eeg_type_ui_state("ieeg", self.biomarker_type)
+        self._clear_severity_state()
         if hasattr(self.window, "waveform_plot"):
             self.window.waveform_plot.update_backend(self.backend, False)
         self.window.main_filename.setText("")
