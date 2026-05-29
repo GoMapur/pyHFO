@@ -242,8 +242,5 @@ class CenterWaveformAndMiniPlotController():
         self.mini_plot_controller.set_total_x_y_range(top_value_mini)
         self.mini_plot_controller.update_highlight_window(start_in_time, end_in_time, top_value_mini)
 
-    def plot_severity_scores(self, scores_df):
-        self.mini_plot_controller.plot_severity_scores(scores_df)
-
     def set_miniplot_y_range(self, y_min: float, y_max: float):
         self.mini_plot_controller.view.plot_widget.setYRange(y_min, y_max, padding=0.05)

@@ -4244,7 +4244,7 @@ class MainWindowModel(QObject):
             return
         scores_df = self.backend.severity_result.scores_df
         if scores_df is not None and len(scores_df):
-            self.window.waveform_plot.plot_severity_scores(scores_df)
+            self.window.waveform_plot.mini_plot_controller.plot_severity_scores(scores_df)
             self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
 
@@ -4279,9 +4279,8 @@ class MainWindowModel(QObject):
             if btn is not None:
                 btn.setEnabled(True)
 
-        scores_df = self.backend.severity_result.scores_df
-        if hasattr(self.window, "waveform_plot") and scores_df is not None and len(scores_df):
-            self.window.waveform_plot.plot_severity_scores(scores_df)
+        if hasattr(self.window, "waveform_plot"):
+            self._reapply_severity_overlay()
 
         # Build sorted index for navigation (highest score first)
         self._severity_rank = 0
