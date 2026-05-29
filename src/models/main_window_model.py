@@ -4246,6 +4246,10 @@ class MainWindowModel(QObject):
         if hasattr(self.window, "severity_export_button"):
             self.window.severity_export_button.setEnabled(True)
 
+        scores_df = self.backend.severity_result.scores_df
+        if hasattr(self.window, "waveform_plot") and scores_df is not None and len(scores_df):
+            self.window.waveform_plot.plot_severity_scores(scores_df)
+
     def export_severity_csv(self):
         if not self.backend.has_severity_result():
             return

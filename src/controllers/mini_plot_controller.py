@@ -69,6 +69,9 @@ class MiniPlotController:
     def set_overlay_run_provider(self, provider):
         self.model.set_overlay_run_provider(provider)
 
+    def plot_severity_scores(self, scores_df):
+        self.view.plot_severity_scores(scores_df)
+
     def sync_left_axis_width(self, axis_width):
         self.view.sync_left_axis_width(axis_width)
 
