@@ -4227,11 +4227,19 @@ class MainWindowModel(QObject):
         btn = getattr(self.window, "severity_run_button", None)
         self._begin_busy_task("severity", "Scoring...", [btn] if btn else [])
 
-        worker = Worker(lambda progress_callback: self.backend.run_severity_scoring(model_dir))
+        worker = Worker(lambda progress_callback: self.backend.run_severity_scoring(model_dir, progress_callback=progress_callback))
+        safe_connect_signal_slot(worker.signals.progress, self._severity_progress)
         self._connect_worker(
             worker, "Severity scoring",
             result_handler=lambda _: self._severity_done(),
         )
+
+    def _severity_progress(self, pct: int):
+        msg = f"Severity scoring... {pct}%"
+        self._set_workflow_message(msg)
+        label = getattr(self.window, "activity_summary_label", None)
+        if label is not None:
+            label.setText(f"Info  {msg}")
 
     def _severity_done(self):
         self._end_busy_task()

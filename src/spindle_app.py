@@ -136,7 +136,7 @@ class SpindleApp(object):
     def default_severity_model_dir():
         return str(Path(os.path.dirname(__file__)).parent / "ckpt" / "severity_model")
 
-    def run_severity_scoring(self, model_dir: str = None):
+    def run_severity_scoring(self, model_dir: str = None, progress_callback=None):
         from src.severity_app import SeverityScorer
         if model_dir is None:
             model_dir = self.default_severity_model_dir()
@@ -146,7 +146,8 @@ class SpindleApp(object):
             self._severity_scorer = SeverityScorer(model_dir)
             self._severity_model_dir = model_dir
         self.severity_result = self._severity_scorer.run(
-            self.eeg_data, self.channel_names, self.sample_freq
+            self.eeg_data, self.channel_names, self.sample_freq,
+            progress_callback=progress_callback,
         )
         return self.severity_result
 

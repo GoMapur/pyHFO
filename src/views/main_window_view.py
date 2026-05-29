@@ -2358,6 +2358,7 @@ class MainWindowView(QObject):
         self.window.severity_jump_button.setEnabled(False)
 
         self.window.severity_next_button = QPushButton("Next Most Severe →")
+        self.window.severity_next_button.setProperty("inspectorPrimary", True)
         self.window.severity_next_button.setToolTip("Jump to the next most severe segment")
         self.window.severity_next_button.setEnabled(False)
 

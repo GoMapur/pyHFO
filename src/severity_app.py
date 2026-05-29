@@ -97,7 +97,7 @@ class SeverityScorer:
     # ── public API ────────────────────────────────────────────────────────────
 
     def run(self, eeg_data: np.ndarray, channel_names: np.ndarray,
-            sample_freq: int) -> SeverityResult:
+            sample_freq: int, progress_callback=None) -> SeverityResult:
         """
         Score a recording.
 
@@ -121,7 +121,7 @@ class SeverityScorer:
             empty = pd.DataFrame(columns=['segment_idx', 'start_sec', 'end_sec', 'score'])
             return SeverityResult(empty, float('nan'), float('nan'), float('nan'))
 
-        scores = self._infer(segments)
+        scores = self._infer(segments, progress_callback=progress_callback)
         # scores: (n_segs,)
 
         n = len(scores)
@@ -225,7 +225,7 @@ class SeverityScorer:
 
     # ── inference ─────────────────────────────────────────────────────────────
 
-    def _infer(self, segments: np.ndarray) -> np.ndarray:
+    def _infer(self, segments: np.ndarray, progress_callback=None) -> np.ndarray:
         """
         segments: (n_segs, 19, 3000) float32 µV
         returns:  (n_segs,) float32 calibrated scores
@@ -236,10 +236,12 @@ class SeverityScorer:
         with torch.no_grad():
             for start in range(0, n, self.batch_size):
                 batch_np = segments[start:start + self.batch_size]
-                # scale µV → model input
                 batch_t  = torch.from_numpy(batch_np * self.INPUT_SCALE).to(self.device)
                 out      = self.model(batch_t)   # calibrated scores
                 scores[start:start + len(out)] = out.cpu().numpy()
+                if progress_callback is not None:
+                    pct = min(int((start + len(out)) / n * 100), 99)
+                    progress_callback.emit(pct)
 
         # Reverse: model output 0=severe, 5=benign → app convention 0=benign, 5=severe
         return np.clip(5.0 - scores, 0.0, 5.0)

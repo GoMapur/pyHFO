@@ -662,7 +662,7 @@ class HFO_App(object):
     def default_severity_model_dir():
         return str(Path(os.path.dirname(__file__)).parent / "ckpt" / "severity_model")
 
-    def run_severity_scoring(self, model_dir: str = None):
+    def run_severity_scoring(self, model_dir: str = None, progress_callback=None):
         '''
         Score the loaded recording using the BASED severity model.
 
@@ -683,7 +683,8 @@ class HFO_App(object):
             self._severity_model_dir = model_dir
 
         self.severity_result = self._severity_scorer.run(
-            self.eeg_data, self.channel_names, self.sample_freq
+            self.eeg_data, self.channel_names, self.sample_freq,
+            progress_callback=progress_callback,
         )
         return self.severity_result
 
