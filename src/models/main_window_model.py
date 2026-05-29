@@ -4297,14 +4297,12 @@ class MainWindowModel(QObject):
             if btn is not None:
                 btn.setEnabled(True)
 
-        if hasattr(self.window, "waveform_plot"):
-            self._reapply_severity_overlay()
-
-        # Build sorted index for navigation (highest score first)
+        scores_df = self.backend.severity_result.scores_df
         self._severity_rank = 0
         self._severity_sorted_idx = scores_df.sort_values("score", ascending=False).index.tolist()
 
-        self._update_severity_window_list()
+        if hasattr(self.window, "waveform_plot"):
+            self._reapply_severity_overlay()
 
     def export_severity_csv(self):
         if not self.backend.has_severity_result():
