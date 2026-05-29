@@ -3105,6 +3105,8 @@ class MainWindowModel(QObject):
             safe_connect_signal_slot(self.window.severity_nav_combo.currentIndexChanged, self._severity_nav_combo_changed)
         if hasattr(self.window, "severity_load_button"):
             safe_connect_signal_slot(self.window.severity_load_button.clicked, self.load_severity_scores)
+        if hasattr(self.window, "severity_batch_button"):
+            safe_connect_signal_slot(self.window.severity_batch_button.clicked, self.batch_score_folder)
 
         self.window.switch_run_button.setEnabled(False)
         self.window.accept_run_button.setEnabled(False)
@@ -4380,6 +4382,78 @@ class MainWindowModel(QObject):
         self.message_handler("Severity scoring complete")
         self._on_severity_result_ready()
         self._auto_save_severity()
+
+    def batch_score_folder(self):
+        from PyQt5.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(self.window, "Select folder to batch score")
+        if not folder:
+            return
+        exts = {".edf", ".eeg", ".vhdr", ".fif"}
+        files = [p for p in Path(folder).iterdir()
+                 if p.suffix.lower() in exts or str(p).lower().endswith(".fif.gz")]
+        if not files:
+            QMessageBox.information(self.window, "No EEG files",
+                                    "No EEG files found in the selected folder.")
+            return
+        btn = getattr(self.window, "severity_batch_button", None)
+        if btn:
+            btn.setEnabled(False)
+        self._begin_busy_task("batch_severity", "Batch scoring...", [btn] if btn else [])
+        worker = Worker(lambda progress_callback: self._run_batch_scoring(files, progress_callback))
+        self._connect_worker(worker, "Batch severity scoring",
+                             result_handler=lambda summary: self._batch_score_done(summary, btn))
+
+    def _run_batch_scoring(self, files, progress_callback):
+        import sys
+        from tqdm import tqdm
+        from src.spindle_app import SpindleApp
+        from src.severity_app import SeverityScorer
+        from src.utils.utils_montage import infer_eeg_type
+
+        scorer = None
+        scored = skipped = errors = 0
+
+        bar = tqdm(files, desc="Batch scoring", unit="file", file=sys.stdout, ascii=True)
+        for i, path in enumerate(bar):
+            cache_path = str(path.with_suffix("")) + ".severity_scores.csv"
+            if os.path.isfile(cache_path):
+                skipped += 1
+                bar.set_postfix(scored=scored, skipped=skipped, errors=errors)
+                if progress_callback is not None:
+                    progress_callback.emit(int((i + 1) / len(files) * 100))
+                continue
+            try:
+                app = SpindleApp()
+                app.load_edf(str(path))
+                if infer_eeg_type(app.channel_names) != "scalp":
+                    skipped += 1
+                    continue
+                if scorer is None:
+                    model_dir = app.default_severity_model_dir()
+                    scorer = SeverityScorer(model_dir)
+                result = scorer.run(app.eeg_data, app.channel_names, app.sample_freq)
+                scorer.export_csv(result, cache_path)
+                scored += 1
+            except Exception as exc:
+                errors += 1
+                print(f"Error scoring {path.name}: {exc}")
+            bar.set_postfix(scored=scored, skipped=skipped, errors=errors)
+            if progress_callback is not None:
+                progress_callback.emit(int((i + 1) / len(files) * 100))
+
+        bar.close()
+        return {"total": len(files), "scored": scored, "skipped": skipped, "errors": errors}
+
+    def _batch_score_done(self, summary, btn):
+        self._end_busy_task()
+        if btn:
+            btn.setEnabled(True)
+        msg = (f"Batch scoring complete — "
+               f"{summary['scored']} scored, "
+               f"{summary['skipped']} skipped (already cached or non-scalp), "
+               f"{summary['errors']} errors")
+        self._set_workflow_message(msg)
+        self.message_handler(msg)
 
     def _auto_save_severity(self):
         try:

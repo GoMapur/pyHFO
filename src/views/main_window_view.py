@@ -2319,6 +2319,11 @@ class MainWindowView(QObject):
         run_row.addWidget(self.window.severity_run_button)
         scoring_layout.addLayout(run_row)
 
+        self.window.severity_batch_button = QPushButton("Batch Score Folder…")
+        self.window.severity_batch_button.setToolTip(
+            "Score all scalp EEG files in a folder and save per-file CSV caches")
+        scoring_layout.addWidget(self.window.severity_batch_button)
+
         layout.addWidget(self._wrap_inspector_section("SCORING", scoring_body))
 
         # --- Results section ---
