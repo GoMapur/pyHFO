@@ -230,18 +230,26 @@ class SeverityScorer:
         segments: (n_segs, 19, 3000) float32 µV
         returns:  (n_segs,) float32 calibrated scores
         """
+        import sys
+        from tqdm import tqdm
+
         n      = len(segments)
         scores = np.empty(n, dtype=np.float32)
 
+        bar = tqdm(total=n, desc="Severity scoring", unit="seg",
+                   file=sys.stdout, ascii=True, dynamic_ncols=True)
         with torch.no_grad():
             for start in range(0, n, self.batch_size):
                 batch_np = segments[start:start + self.batch_size]
                 batch_t  = torch.from_numpy(batch_np * self.INPUT_SCALE).to(self.device)
-                out      = self.model(batch_t)   # calibrated scores
-                scores[start:start + len(out)] = out.cpu().numpy()
+                out      = self.model(batch_t)
+                batch_len = len(out)
+                scores[start:start + batch_len] = out.cpu().numpy()
+                bar.update(batch_len)
                 if progress_callback is not None:
-                    pct = min(int((start + len(out)) / n * 100), 99)
+                    pct = min(int((start + batch_len) / n * 100), 99)
                     progress_callback.emit(pct)
+        bar.close()
 
         # Reverse: model output 0=severe, 5=benign → app convention 0=benign, 5=severe
         return np.clip(5.0 - scores, 0.0, 5.0)
