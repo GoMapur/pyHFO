@@ -4218,18 +4218,21 @@ class MainWindowModel(QObject):
         if not model_dir:
             model_dir = self.backend.default_severity_model_dir()
 
+        self.message_handler("Running severity scoring...")
+        self._set_workflow_message("Running severity scoring...")
         btn = getattr(self.window, "severity_run_button", None)
-        if btn is not None:
-            btn.setEnabled(False)
+        self._begin_busy_task("severity", "Scoring...", [btn] if btn else [])
 
         worker = Worker(lambda progress_callback: self.backend.run_severity_scoring(model_dir))
         self._connect_worker(
             worker, "Severity scoring",
             result_handler=lambda _: self._severity_done(),
-            finished_handler=lambda: btn.setEnabled(True) if btn else None,
         )
 
     def _severity_done(self):
+        self._end_busy_task()
+        self._set_workflow_message("Severity scoring complete")
+        self.message_handler("Severity scoring complete")
         summary = self.backend.get_severity_summary()
         if summary is None:
             return
