@@ -2362,9 +2362,9 @@ class MainWindowView(QObject):
         self.window.severity_jump_clean_button.setToolTip("Jump to the highest severity segment where max |voltage| < 1000 µV")
         self.window.severity_jump_clean_button.setEnabled(False)
 
-        self.window.severity_next_button = QPushButton("Next Most Severe →")
+        self.window.severity_next_button = QPushButton("Next Most Severe Non-Artifactual →")
         self.window.severity_next_button.setProperty("inspectorPrimary", True)
-        self.window.severity_next_button.setToolTip("Jump to the next most severe segment")
+        self.window.severity_next_button.setToolTip("Jump to the next most severe segment where max |voltage| < 1000 µV")
         self.window.severity_next_button.setEnabled(False)
 
         nav_layout = QVBoxLayout()

@@ -4360,11 +4360,15 @@ class MainWindowModel(QObject):
     def severity_jump_to_next_severe(self):
         if not self.backend or not self.backend.has_severity_result():
             return
-        n = len(getattr(self, "_severity_sorted_idx", []))
-        if n == 0:
-            return
-        self._severity_rank = (getattr(self, "_severity_rank", 0) + 1) % n
-        self._severity_navigate_to_rank()
+        sorted_idx = getattr(self, "_severity_sorted_idx", [])
+        scores_df = self.backend.severity_result.scores_df
+        start_rank = getattr(self, "_severity_rank", 0) + 1
+        for rank in range(start_rank, len(sorted_idx)):
+            if not self._severity_segment_is_artifactual(scores_df, sorted_idx[rank]):
+                self._severity_rank = rank
+                self._severity_navigate_to_rank()
+                return
+        self._set_workflow_message("No more non-artifactual segments")
 
     def _severity_navigate_to_rank(self):
         sorted_idx = getattr(self, "_severity_sorted_idx", [])
