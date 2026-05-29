@@ -89,6 +89,11 @@ class SpindleApp(object):
         self.Spindles = None
         self.analysis_session = AnalysisSession(self.biomarker_type)
 
+        ## severity scoring related
+        self._severity_scorer = None
+        self._severity_model_dir = None
+        self.severity_result = None
+
     def set_n_jobs(self, n_jobs):
         self.n_jobs = int(n_jobs)
         if self.param_detector is not None:
@@ -124,6 +129,45 @@ class SpindleApp(object):
         if input_dir is None:
             raise ValueError("input_dir is required to create a batch project.")
         return create_batch_project(input_dir, output_dir, recursive=recursive)
+
+    # ── severity scoring ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def default_severity_model_dir():
+        return str(Path(os.path.dirname(__file__)).parent / "ckpt" / "severity_model")
+
+    def run_severity_scoring(self, model_dir: str = None):
+        from src.severity_app import SeverityScorer
+        if model_dir is None:
+            model_dir = self.default_severity_model_dir()
+        if self.eeg_data is None or self.channel_names is None:
+            raise ValueError("Load an EEG recording before running severity scoring.")
+        if self._severity_scorer is None or self._severity_model_dir != model_dir:
+            self._severity_scorer = SeverityScorer(model_dir)
+            self._severity_model_dir = model_dir
+        self.severity_result = self._severity_scorer.run(
+            self.eeg_data, self.channel_names, self.sample_freq
+        )
+        return self.severity_result
+
+    def export_severity_csv(self, path: str):
+        if self.severity_result is None:
+            raise ValueError("Run severity scoring first.")
+        self._severity_scorer.export_csv(self.severity_result, path)
+
+    def get_severity_summary(self):
+        if self.severity_result is None:
+            return None
+        r = self.severity_result
+        return {
+            'mean_score':    r.mean_score,
+            'peak_score':    r.peak_score,
+            'peak_time_sec': r.peak_time_sec,
+            'n_segments':    len(r.scores_df),
+        }
+
+    def has_severity_result(self):
+        return self.severity_result is not None
 
     def get_edf_info(self):
         return self.edf_param
