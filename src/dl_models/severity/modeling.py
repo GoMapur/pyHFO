@@ -14,6 +14,12 @@ from .cbramod_preference_learner import CBRAMODPreferenceLearner
 
 class BasedSeverityModel(PreTrainedModel):
     config_class = BasedSeverityConfig
+    _tied_weights_keys = []
+
+    # transformers 5.x renamed _tied_weights_keys to all_tied_weights_keys (dict)
+    @property
+    def all_tied_weights_keys(self):
+        return {}
 
     def __init__(self, config: BasedSeverityConfig):
         super().__init__(config)
