@@ -465,6 +465,8 @@ class MainWindowModel(QObject):
     def init_error_terminal_display(self):
         self.window._original_stdout = sys.stdout
         self.window._original_stderr = sys.stderr
+        if os.environ.get('PYBRAIN_DEBUG'):
+            return
         self.window.stdout = Queue()
         self.window.stderr = Queue()
         sys.stdout = WriteStream(self.window.stdout)
@@ -4220,7 +4222,7 @@ class MainWindowModel(QObject):
         if btn is not None:
             btn.setEnabled(False)
 
-        worker = Worker(lambda: self.backend.run_severity_scoring(model_dir))
+        worker = Worker(lambda progress_callback: self.backend.run_severity_scoring(model_dir))
         self._connect_worker(
             worker, "Severity scoring",
             result_handler=lambda _: self._severity_done(),
