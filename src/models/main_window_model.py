@@ -4341,7 +4341,7 @@ class MainWindowModel(QObject):
         self._severity_df_clean_sorted = clean_df.sort_values("score", ascending=False).reset_index(drop=True)
         self._severity_rank = 0
         self._severity_clean_rank = 0
-        self._update_severity_distribution_plot(self._severity_df_time)
+        self._update_severity_distribution_plot(self._severity_df_clean_time)
         if hasattr(self.window, "waveform_plot"):
             self._reapply_severity_overlay()
 
