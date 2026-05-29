@@ -4360,14 +4360,22 @@ class MainWindowModel(QObject):
         self._set_workflow_message("All segments exceed the 1000 µV artifact threshold")
 
     def _severity_segment_is_artifactual(self, scores_df, row_idx, threshold_uv: float = 1000.0) -> bool:
-        """Return True if the segment's raw EEG has any channel exceeding threshold_uv."""
+        """Return True if any TUEG-19 EEG channel in the segment exceeds threshold_uv."""
         try:
+            from src.severity_app import TUEG_19, _clean_ch
             start_sec = float(scores_df.loc[row_idx, "start_sec"])
             end_sec = float(scores_df.loc[row_idx, "end_sec"])
             fs = self.backend.sample_freq
             s0 = int(start_sec * fs)
             s1 = int(end_sec * fs)
-            segment = self.backend.eeg_data[:, s0:s1]
+            tueg_set = set(TUEG_19)
+            eeg_rows = [
+                i for i, ch in enumerate(self.backend.channel_names)
+                if _clean_ch(str(ch)) in tueg_set
+            ]
+            if not eeg_rows:
+                return False
+            segment = self.backend.eeg_data[eeg_rows, s0:s1]
             return float(np.abs(segment).max()) >= threshold_uv
         except Exception:
             return False
