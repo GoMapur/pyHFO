@@ -3809,16 +3809,19 @@ class MainWindowView(QObject):
         placeholder.move(x_pos, y_pos)
 
     def eventFilter(self, obj, event):
-        target = getattr(self, "_placeholder_target", None)
-        if obj is target and event.type() in {QEvent.Resize, QEvent.Show}:
-            QtCore.QTimer.singleShot(0, self._reposition_waveform_placeholder)
-        window = getattr(self, "window", None)
-        toolbar = getattr(window, "waveform_toolbar_frame", None) if window is not None else None
-        if obj is toolbar and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
-            self._lock_waveform_toolbar_button_widths()
-        image_label = getattr(window, "image_label", None) if window is not None else None
-        if obj is image_label and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
-            QtCore.QTimer.singleShot(0, self._refresh_hub_model_banner)
+        try:
+            target = getattr(self, "_placeholder_target", None)
+            if obj is target and event.type() in {QEvent.Resize, QEvent.Show}:
+                QtCore.QTimer.singleShot(0, self._reposition_waveform_placeholder)
+            window = getattr(self, "window", None)
+            toolbar = getattr(window, "waveform_toolbar_frame", None) if window is not None else None
+            if obj is toolbar and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
+                self._lock_waveform_toolbar_button_widths()
+            image_label = getattr(window, "image_label", None) if window is not None else None
+            if obj is image_label and event.type() in {QEvent.Show, QEvent.Resize, QEvent.LayoutRequest}:
+                QtCore.QTimer.singleShot(0, self._refresh_hub_model_banner)
+        except RuntimeError:
+            pass
         return super(MainWindowView, self).eventFilter(obj, event)
 
     def _build_workflow_header(self):
