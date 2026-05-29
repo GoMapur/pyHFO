@@ -4255,6 +4255,8 @@ class MainWindowModel(QObject):
     def _clear_severity_state(self):
         self._severity_rank = 0
         self._severity_sorted_idx = []
+        self._severity_clean_rank = 0
+        self._severity_clean_sorted_idx = []
         for attr in ("severity_mean_value", "severity_peak_value", "severity_peak_time_value"):
             lbl = getattr(self.window, attr, None)
             if lbl is not None:
@@ -4332,6 +4334,11 @@ class MainWindowModel(QObject):
 
         self._severity_rank = 0
         self._severity_sorted_idx = scores_df.sort_values("score", ascending=False).index.tolist()
+        # Pre-compute clean (non-artifactual) sorted index — used by navigation buttons
+        self._severity_clean_rank = 0
+        self._severity_clean_sorted_idx = (
+            clean_df.sort_values("score", ascending=False).index.tolist()
+        )
 
         if hasattr(self.window, "waveform_plot"):
             self._reapply_severity_overlay()
@@ -4367,14 +4374,12 @@ class MainWindowModel(QObject):
     def severity_jump_to_most_severe_non_artifactual(self):
         if not self.backend or not self.backend.has_severity_result():
             return
-        sorted_idx = getattr(self, "_severity_sorted_idx", [])
-        scores_df = self.backend.severity_result.scores_df
-        for rank, row_idx in enumerate(sorted_idx):
-            if not self._severity_segment_is_artifactual(scores_df, row_idx):
-                self._severity_rank = rank
-                self._severity_navigate_to_rank()
-                return
-        self._set_workflow_message("All segments exceed the 1000 µV artifact threshold")
+        clean_idx = getattr(self, "_severity_clean_sorted_idx", [])
+        if not clean_idx:
+            self._set_workflow_message("All segments exceed the 1000 µV artifact threshold")
+            return
+        self._severity_clean_rank = 0
+        self._severity_navigate_to_clean_rank()
 
     def _severity_segment_is_artifactual(self, scores_df, row_idx, threshold_uv: float = 1000.0) -> bool:
         """Return True if any TUEG-19 EEG channel in the segment exceeds threshold_uv."""
@@ -4400,15 +4405,13 @@ class MainWindowModel(QObject):
     def severity_jump_to_next_severe(self):
         if not self.backend or not self.backend.has_severity_result():
             return
-        sorted_idx = getattr(self, "_severity_sorted_idx", [])
-        scores_df = self.backend.severity_result.scores_df
-        start_rank = getattr(self, "_severity_rank", 0) + 1
-        for rank in range(start_rank, len(sorted_idx)):
-            if not self._severity_segment_is_artifactual(scores_df, sorted_idx[rank]):
-                self._severity_rank = rank
-                self._severity_navigate_to_rank()
-                return
-        self._set_workflow_message("No more non-artifactual segments")
+        clean_idx = getattr(self, "_severity_clean_sorted_idx", [])
+        next_rank = getattr(self, "_severity_clean_rank", 0) + 1
+        if next_rank >= len(clean_idx):
+            self._set_workflow_message("No more non-artifactual segments")
+            return
+        self._severity_clean_rank = next_rank
+        self._severity_navigate_to_clean_rank()
 
     def _severity_navigate_to_rank(self):
         sorted_idx = getattr(self, "_severity_sorted_idx", [])
@@ -4421,6 +4424,19 @@ class MainWindowModel(QObject):
         score = float(scores_df.loc[row_idx, "score"])
         n = len(sorted_idx)
         self._set_workflow_message(f"Severity rank {rank + 1}/{n} — score {score:.3f} at {start_sec:.1f} s")
+        self._severity_jump_to_time(start_sec)
+
+    def _severity_navigate_to_clean_rank(self):
+        clean_idx = getattr(self, "_severity_clean_sorted_idx", [])
+        if not clean_idx:
+            return
+        rank = getattr(self, "_severity_clean_rank", 0)
+        row_idx = clean_idx[rank]
+        scores_df = self.backend.severity_result.scores_df
+        start_sec = float(scores_df.loc[row_idx, "start_sec"])
+        score = float(scores_df.loc[row_idx, "score"])
+        n = len(clean_idx)
+        self._set_workflow_message(f"Non-artifactual rank {rank + 1}/{n} — score {score:.3f} at {start_sec:.1f} s")
         self._severity_jump_to_time(start_sec)
 
     def _update_severity_window_list(self):
