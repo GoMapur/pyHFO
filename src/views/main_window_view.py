@@ -2311,6 +2311,7 @@ class MainWindowView(QObject):
         self.window.severity_run_button.setToolTip("Run severity scoring on the loaded scalp EEG")
 
         self.window.severity_load_button = QPushButton("Load Scores")
+        self.window.severity_load_button.setProperty("inspectorPrimary", True)
         self.window.severity_load_button.setToolTip("Load previously exported severity scores from a CSV file")
 
         run_row = QHBoxLayout()
@@ -2320,6 +2321,7 @@ class MainWindowView(QObject):
         scoring_layout.addLayout(run_row)
 
         self.window.severity_batch_button = QPushButton("Batch Score Folder…")
+        self.window.severity_batch_button.setProperty("inspectorPrimary", True)
         self.window.severity_batch_button.setToolTip(
             "Score all scalp EEG files in a folder and save per-file CSV caches")
         scoring_layout.addWidget(self.window.severity_batch_button)
