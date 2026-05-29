@@ -90,6 +90,7 @@ class SeverityScorer:
                 device = 'cpu'
         self.device     = torch.device(device)
         self.batch_size = batch_size
+        print(f"SeverityScorer: using device '{device}'")
 
         self.model = BasedSeverityModel.from_pretrained(model_dir)
         self.model.to(self.device).eval()

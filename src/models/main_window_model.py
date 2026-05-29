@@ -4237,6 +4237,16 @@ class MainWindowModel(QObject):
             result_handler=lambda _: self._severity_done(),
         )
 
+    def _reapply_severity_overlay(self):
+        if not hasattr(self.window, "waveform_plot"):
+            return
+        if self.backend is None or not getattr(self.backend, "has_severity_result", lambda: False)():
+            return
+        scores_df = self.backend.severity_result.scores_df
+        if scores_df is not None and len(scores_df):
+            self.window.waveform_plot.plot_severity_scores(scores_df)
+        self._update_severity_window_list()
+
     def _severity_progress(self, pct: int):
         msg = f"Severity scoring... {pct}%"
         self._set_workflow_message(msg)
@@ -5950,6 +5960,7 @@ class MainWindowModel(QObject):
         self.window.channel_scroll_bar.setMaximum(len(self.window.waveform_plot.get_channels_to_plot()) - n_channels_to_plot)
         self.window.channel_scroll_bar.setValue(c_value)
         self.window.waveform_plot.plot(start, first_channel_to_plot, empty=is_empty, update_biomarker=True)
+        self._reapply_severity_overlay()
         if hasattr(self.window, "go_to_time_input"):
             blocker = QSignalBlocker(self.window.go_to_time_input)
             self.window.go_to_time_input.setMaximum(max(0.0, self.window.waveform_plot.get_total_time()))
