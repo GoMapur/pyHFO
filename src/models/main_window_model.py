@@ -4277,12 +4277,32 @@ class MainWindowModel(QObject):
         if self.backend is None or not getattr(self.backend, "has_severity_result", lambda: False)():
             return
         scores_df = self.backend.severity_result.scores_df
-        if scores_df is not None and len(scores_df):
-            mini = self.window.waveform_plot.mini_plot_controller
-            for _, row in scores_df.iterrows():
-                color = self._severity_score_color(row["score"])
-                mini.plot_one_biomarker(row["start_sec"], row["end_sec"], row["score"], color, width=2)
-            self.window.waveform_plot.set_miniplot_y_range(0, 5)
+        if scores_df is None or len(scores_df) == 0:
+            self._update_severity_window_list()
+            return
+
+        # Batch by color bucket (10 buckets) — reduces N pyqtgraph items to ≤10
+        import pyqtgraph as pg
+        buckets: dict = {}
+        for _, row in scores_df.iterrows():
+            score = float(row["score"])
+            bucket = round(score * 2) / 2          # quantise to 0.5 steps → 11 buckets max
+            color = self._severity_score_color(bucket)
+            if color not in buckets:
+                buckets[color] = ([], [])
+            xs, ys = buckets[color]
+            xs += [float(row["start_sec"]), float(row["end_sec"]), float("nan")]
+            ys += [score, score, float("nan")]
+
+        plot_widget = self.window.waveform_plot.mini_plot_controller.view.plot_widget
+        for color, (xs, ys) in buckets.items():
+            plot_widget.plot(
+                np.array(xs, dtype=float),
+                np.array(ys, dtype=float),
+                pen=pg.mkPen(color=color, width=2),
+                connect="finite",
+            )
+        self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
 
     def _severity_progress(self, pct: int):
