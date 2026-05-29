@@ -2356,28 +2356,37 @@ class MainWindowView(QObject):
         stats_layout.addWidget(self.window.severity_peak_time_value, 2, 1)
         results_outer.addWidget(stats_body)
 
-        # Navigation buttons
-        self.window.severity_jump_button = QPushButton("Jump to Most Severe")
-        self.window.severity_jump_button.setProperty("inspectorPrimary", True)
-        self.window.severity_jump_button.setToolTip("Jump to the highest severity segment in the recording")
-        self.window.severity_jump_button.setEnabled(False)
-
+        # Navigation
         self.window.severity_jump_clean_button = QPushButton("Jump to Most Severe Non-Artifactual")
         self.window.severity_jump_clean_button.setProperty("inspectorPrimary", True)
         self.window.severity_jump_clean_button.setToolTip("Jump to the highest severity segment where max |voltage| < 1000 µV")
         self.window.severity_jump_clean_button.setEnabled(False)
 
-        self.window.severity_next_button = QPushButton("Next Most Severe Non-Artifactual →")
+        self.window.severity_prev_button = QPushButton("← Prev")
+        self.window.severity_prev_button.setProperty("inspectorPrimary", True)
+        self.window.severity_prev_button.setEnabled(False)
+
+        self.window.severity_nav_combo = QtWidgets.QComboBox()
+        self.window.severity_nav_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.window.severity_nav_combo.setEnabled(False)
+        self.window.severity_nav_combo.setToolTip("Select severity rank to jump to")
+
+        self.window.severity_next_button = QPushButton("Next →")
         self.window.severity_next_button.setProperty("inspectorPrimary", True)
-        self.window.severity_next_button.setToolTip("Jump to the next most severe segment where max |voltage| < 1000 µV")
         self.window.severity_next_button.setEnabled(False)
+
+        pn_row = QHBoxLayout()
+        pn_row.setContentsMargins(0, 0, 0, 0)
+        pn_row.setSpacing(3)
+        pn_row.addWidget(self.window.severity_prev_button)
+        pn_row.addWidget(self.window.severity_nav_combo, 1)
+        pn_row.addWidget(self.window.severity_next_button)
 
         nav_layout = QVBoxLayout()
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(3)
-        nav_layout.addWidget(self.window.severity_jump_button)
         nav_layout.addWidget(self.window.severity_jump_clean_button)
-        nav_layout.addWidget(self.window.severity_next_button)
+        nav_layout.addLayout(pn_row)
         results_outer.addLayout(nav_layout)
 
         # Current window scores list

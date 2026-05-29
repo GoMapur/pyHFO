@@ -3095,12 +3095,14 @@ class MainWindowModel(QObject):
             safe_connect_signal_slot(self.window.severity_run_button.clicked, self.run_severity_scoring)
         if hasattr(self.window, "severity_export_button"):
             safe_connect_signal_slot(self.window.severity_export_button.clicked, self.export_severity_csv)
-        if hasattr(self.window, "severity_jump_button"):
-            safe_connect_signal_slot(self.window.severity_jump_button.clicked, self.severity_jump_to_most_severe)
         if hasattr(self.window, "severity_jump_clean_button"):
             safe_connect_signal_slot(self.window.severity_jump_clean_button.clicked, self.severity_jump_to_most_severe_non_artifactual)
+        if hasattr(self.window, "severity_prev_button"):
+            safe_connect_signal_slot(self.window.severity_prev_button.clicked, self.severity_prev)
         if hasattr(self.window, "severity_next_button"):
-            safe_connect_signal_slot(self.window.severity_next_button.clicked, self.severity_jump_to_next_severe)
+            safe_connect_signal_slot(self.window.severity_next_button.clicked, self.severity_next)
+        if hasattr(self.window, "severity_nav_combo"):
+            safe_connect_signal_slot(self.window.severity_nav_combo.currentIndexChanged, self._severity_nav_combo_changed)
         if hasattr(self.window, "severity_load_button"):
             safe_connect_signal_slot(self.window.severity_load_button.clicked, self.load_severity_scores)
 
@@ -4265,10 +4267,17 @@ class MainWindowModel(QObject):
             lbl = getattr(self.window, attr, None)
             if lbl is not None:
                 lbl.setText("--")
-        for attr in ("severity_jump_button", "severity_jump_clean_button", "severity_next_button", "severity_export_button"):
+        for attr in ("severity_jump_clean_button", "severity_prev_button",
+                     "severity_next_button", "severity_export_button"):
             btn = getattr(self.window, attr, None)
             if btn is not None:
                 btn.setEnabled(False)
+        combo = getattr(self.window, "severity_nav_combo", None)
+        if combo is not None:
+            blocker = QSignalBlocker(combo)
+            combo.clear()
+            combo.setEnabled(False)
+            del blocker
         lst = getattr(self.window, "severity_window_list", None)
         if lst is not None:
             lst.clear()
@@ -4329,11 +4338,12 @@ class MainWindowModel(QObject):
             self.window.severity_peak_time_value.setText(
                 f"{peak_time:.1f} s" if peak_time == peak_time else "—")
 
-        for btn_attr in ("severity_export_button", "severity_jump_button",
-                         "severity_jump_clean_button", "severity_next_button"):
+        for btn_attr in ("severity_export_button", "severity_jump_clean_button",
+                         "severity_prev_button", "severity_next_button"):
             btn = getattr(self.window, btn_attr, None)
             if btn is not None:
                 btn.setEnabled(True)
+        self._populate_severity_nav_combo()
 
         self._severity_df_time         = scores_df.sort_values("start_sec").reset_index(drop=True)
         self._severity_df_clean_time   = clean_df.sort_values("start_sec").reset_index(drop=True)
@@ -4445,12 +4455,6 @@ class MainWindowModel(QObject):
         self._set_workflow_message(f"Jumped to {target:.1f} s")
         self._update_severity_window_list()
 
-    def severity_jump_to_most_severe(self):
-        if not self.backend or not self.backend.has_severity_result():
-            return
-        self._severity_rank = 0
-        self._severity_navigate_to_rank()
-
     def severity_jump_to_most_severe_non_artifactual(self):
         if not self.backend or not self.backend.has_severity_result():
             return
@@ -4459,6 +4463,7 @@ class MainWindowModel(QObject):
             self._set_workflow_message("All segments exceed the 1000 µV artifact threshold")
             return
         self._severity_clean_rank = 0
+        self._sync_severity_nav_combo()
         self._severity_navigate_to_clean_rank()
 
     def _compute_clean_df(self, scores_df, threshold_uv: float = 1000.0):
@@ -4503,25 +4508,59 @@ class MainWindowModel(QObject):
         except Exception:
             return False
 
-    def severity_jump_to_next_severe(self):
+    def severity_prev(self):
+        if not self.backend or not self.backend.has_severity_result():
+            return
+        if self._severity_clean_rank <= 0:
+            self._set_workflow_message("Already at the most severe non-artifactual segment")
+            return
+        self._severity_clean_rank -= 1
+        self._sync_severity_nav_combo()
+        self._severity_navigate_to_clean_rank()
+
+    def severity_next(self):
         if not self.backend or not self.backend.has_severity_result():
             return
         df = getattr(self, "_severity_df_clean_sorted", None)
-        next_rank = self._severity_clean_rank + 1
-        if df is None or next_rank >= len(df):
+        if df is None or self._severity_clean_rank >= len(df) - 1:
             self._set_workflow_message("No more non-artifactual segments")
             return
-        self._severity_clean_rank = next_rank
+        self._severity_clean_rank += 1
+        self._sync_severity_nav_combo()
         self._severity_navigate_to_clean_rank()
 
-    def _severity_navigate_to_rank(self):
-        df = getattr(self, "_severity_df_sorted", None)
-        if df is None or len(df) == 0:
+    def _severity_nav_combo_changed(self, index):
+        if index < 0:
             return
-        row = df.iloc[self._severity_rank]
-        self._set_workflow_message(
-            f"Severity rank {self._severity_rank + 1}/{len(df)} — score {row['score']:.3f} at {row['start_sec']:.1f} s")
-        self._severity_jump_to_time(float(row["start_sec"]))
+        df = getattr(self, "_severity_df_clean_sorted", None)
+        if df is None or index >= len(df):
+            return
+        self._severity_clean_rank = index
+        self._severity_navigate_to_clean_rank()
+
+    def _populate_severity_nav_combo(self):
+        combo = getattr(self.window, "severity_nav_combo", None)
+        if combo is None:
+            return
+        df = getattr(self, "_severity_df_clean_sorted", None)
+        blocker = QSignalBlocker(combo)
+        combo.clear()
+        if df is not None and len(df):
+            for i, row in enumerate(df.itertuples(index=False)):
+                combo.addItem(f"Top {i + 1}  —  {row.score:.3f}  at {row.start_sec:.0f}s")
+            combo.setCurrentIndex(0)
+            combo.setEnabled(True)
+        else:
+            combo.setEnabled(False)
+        del blocker
+
+    def _sync_severity_nav_combo(self):
+        combo = getattr(self.window, "severity_nav_combo", None)
+        if combo is None:
+            return
+        blocker = QSignalBlocker(combo)
+        combo.setCurrentIndex(self._severity_clean_rank)
+        del blocker
 
     def _severity_navigate_to_clean_rank(self):
         df = getattr(self, "_severity_df_clean_sorted", None)
