@@ -241,4 +241,5 @@ class SeverityScorer:
                 out      = self.model(batch_t)   # calibrated scores
                 scores[start:start + len(out)] = out.cpu().numpy()
 
-        return scores
+        # Reverse: model output 0=severe, 5=benign → app convention 0=benign, 5=severe
+        return np.clip(5.0 - scores, 0.0, 5.0)

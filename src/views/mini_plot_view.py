@@ -73,16 +73,17 @@ class MiniPlotView(QtWidgets.QGraphicsView):
         else:
             self.timeline_baseline.setData([x_range[0], x_range[1]], [baseline_y, baseline_y])
 
-    def plot_severity_scores(self, scores_df, y: float = 0.5, width: int = 10):
-        """Draw one thick colored bar per 15-second segment, color-mapped by score."""
+    def plot_severity_scores(self, scores_df, width: int = 2):
+        """Draw one colored line per 15-second segment at its actual score value (0-5)."""
         for _, row in scores_df.iterrows():
             score = float(row["score"])
             color = self._severity_score_color(score)
             self.plot_widget.plot(
                 [float(row["start_sec"]), float(row["end_sec"])],
-                [y, y],
+                [score, score],
                 pen=pg.mkPen(color=color, width=width),
             )
+        self.plot_widget.setYRange(0, 5, padding=0.05)
 
     @staticmethod
     def _severity_score_color(score: float) -> str:

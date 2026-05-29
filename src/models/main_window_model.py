@@ -3094,6 +3094,10 @@ class MainWindowModel(QObject):
             safe_connect_signal_slot(self.window.severity_run_button.clicked, self.run_severity_scoring)
         if hasattr(self.window, "severity_export_button"):
             safe_connect_signal_slot(self.window.severity_export_button.clicked, self.export_severity_csv)
+        if hasattr(self.window, "severity_jump_button"):
+            safe_connect_signal_slot(self.window.severity_jump_button.clicked, self.severity_jump_to_most_severe)
+        if hasattr(self.window, "severity_next_button"):
+            safe_connect_signal_slot(self.window.severity_next_button.clicked, self.severity_jump_to_next_severe)
 
         self.window.switch_run_button.setEnabled(False)
         self.window.accept_run_button.setEnabled(False)
@@ -4248,12 +4252,20 @@ class MainWindowModel(QObject):
             t = summary["peak_time_sec"]
             self.window.severity_peak_time_value.setText(
                 f"{t:.1f} s" if t == t else "—")
-        if hasattr(self.window, "severity_export_button"):
-            self.window.severity_export_button.setEnabled(True)
+        for btn_attr in ("severity_export_button", "severity_jump_button", "severity_next_button"):
+            btn = getattr(self.window, btn_attr, None)
+            if btn is not None:
+                btn.setEnabled(True)
 
         scores_df = self.backend.severity_result.scores_df
         if hasattr(self.window, "waveform_plot") and scores_df is not None and len(scores_df):
             self.window.waveform_plot.plot_severity_scores(scores_df)
+
+        # Build sorted index for navigation (highest score first)
+        self._severity_rank = 0
+        self._severity_sorted_idx = scores_df.sort_values("score", ascending=False).index.tolist()
+
+        self._update_severity_window_list()
 
     def export_severity_csv(self):
         if not self.backend.has_severity_result():
@@ -4264,6 +4276,76 @@ class MainWindowModel(QObject):
             "CSV files (*.csv)")
         if path:
             self.backend.export_severity_csv(path)
+
+    def _severity_jump_to_time(self, start_sec: float):
+        """Navigate the waveform to start_sec and update the window scores list."""
+        if not hasattr(self.window, "waveform_plot"):
+            return
+        total_time = float(self.window.waveform_plot.get_total_time())
+        time_window = max(0.1, float(self.window.display_time_window_input.value()))
+        target = min(max(0.0, start_sec), max(0.0, total_time - time_window))
+        self.window.waveform_plot.t_start = target
+        self.waveform_plot_button_clicked()
+        self._set_workflow_message(f"Jumped to {target:.1f} s")
+        self._update_severity_window_list()
+
+    def severity_jump_to_most_severe(self):
+        if not self.backend or not self.backend.has_severity_result():
+            return
+        self._severity_rank = 0
+        self._severity_navigate_to_rank()
+
+    def severity_jump_to_next_severe(self):
+        if not self.backend or not self.backend.has_severity_result():
+            return
+        n = len(getattr(self, "_severity_sorted_idx", []))
+        if n == 0:
+            return
+        self._severity_rank = (getattr(self, "_severity_rank", 0) + 1) % n
+        self._severity_navigate_to_rank()
+
+    def _severity_navigate_to_rank(self):
+        sorted_idx = getattr(self, "_severity_sorted_idx", [])
+        if not sorted_idx:
+            return
+        rank = getattr(self, "_severity_rank", 0)
+        row_idx = sorted_idx[rank]
+        scores_df = self.backend.severity_result.scores_df
+        start_sec = float(scores_df.loc[row_idx, "start_sec"])
+        score = float(scores_df.loc[row_idx, "score"])
+        n = len(sorted_idx)
+        self._set_workflow_message(f"Severity rank {rank + 1}/{n} — score {score:.3f} at {start_sec:.1f} s")
+        self._severity_jump_to_time(start_sec)
+
+    def _update_severity_window_list(self):
+        list_widget = getattr(self.window, "severity_window_list", None)
+        if list_widget is None:
+            return
+        if not self.backend or not self.backend.has_severity_result():
+            list_widget.clear()
+            return
+        scores_df = self.backend.severity_result.scores_df
+        if scores_df is None or len(scores_df) == 0:
+            list_widget.clear()
+            return
+
+        # Get current view window
+        try:
+            t_start = float(self.window.waveform_plot.t_start)
+            t_end = t_start + float(self.window.display_time_window_input.value())
+        except Exception:
+            list_widget.clear()
+            return
+
+        # Find all segments that overlap the current view (including partials)
+        overlap = scores_df[
+            (scores_df["end_sec"] > t_start) & (scores_df["start_sec"] < t_end)
+        ].copy()
+
+        list_widget.clear()
+        for _, row in overlap.iterrows():
+            label = f"{row['start_sec']:.0f}s – {row['end_sec']:.0f}s   {row['score']:.3f}"
+            list_widget.addItem(label)
 
     # ─────────────────────────────────────────────────────────────────────────
 

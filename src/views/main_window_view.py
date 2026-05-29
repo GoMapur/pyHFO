@@ -2317,11 +2317,10 @@ class MainWindowView(QObject):
         layout.addWidget(self._wrap_inspector_section("SCORING", scoring_body))
 
         # --- Results section ---
-        results_body = QFrame(page)
-        results_layout = QGridLayout(results_body)
-        results_layout.setContentsMargins(0, 0, 0, 0)
-        results_layout.setHorizontalSpacing(8)
-        results_layout.setVerticalSpacing(4)
+        results_frame = QFrame(page)
+        results_outer = QVBoxLayout(results_frame)
+        results_outer.setContentsMargins(0, 0, 0, 0)
+        results_outer.setSpacing(6)
 
         def _metric_label(text):
             lbl = QLabel(text)
@@ -2333,30 +2332,59 @@ class MainWindowView(QObject):
             lbl.setProperty("metricValue", True)
             return lbl
 
+        # Summary stats row
+        stats_body = QFrame(results_frame)
+        stats_layout = QGridLayout(stats_body)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setHorizontalSpacing(8)
+        stats_layout.setVerticalSpacing(4)
+
         self.window.severity_mean_value = _metric_value()
         self.window.severity_peak_value = _metric_value()
         self.window.severity_peak_time_value = _metric_value()
 
-        results_layout.addWidget(_metric_label("Mean"), 0, 0)
-        results_layout.addWidget(self.window.severity_mean_value, 0, 1)
-        results_layout.addWidget(_metric_label("Peak"), 1, 0)
-        results_layout.addWidget(self.window.severity_peak_value, 1, 1)
-        results_layout.addWidget(_metric_label("Peak at"), 2, 0)
-        results_layout.addWidget(self.window.severity_peak_time_value, 2, 1)
+        stats_layout.addWidget(_metric_label("Mean"), 0, 0)
+        stats_layout.addWidget(self.window.severity_mean_value, 0, 1)
+        stats_layout.addWidget(_metric_label("Peak"), 1, 0)
+        stats_layout.addWidget(self.window.severity_peak_value, 1, 1)
+        stats_layout.addWidget(_metric_label("Peak at"), 2, 0)
+        stats_layout.addWidget(self.window.severity_peak_time_value, 2, 1)
+        results_outer.addWidget(stats_body)
 
+        # Navigation buttons
+        self.window.severity_jump_button = QPushButton("Jump to Most Severe")
+        self.window.severity_jump_button.setProperty("inspectorPrimary", True)
+        self.window.severity_jump_button.setToolTip("Jump to the highest severity segment in the recording")
+        self.window.severity_jump_button.setEnabled(False)
+
+        self.window.severity_next_button = QPushButton("Next Most Severe →")
+        self.window.severity_next_button.setToolTip("Jump to the next most severe segment")
+        self.window.severity_next_button.setEnabled(False)
+
+        nav_layout = QVBoxLayout()
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(3)
+        nav_layout.addWidget(self.window.severity_jump_button)
+        nav_layout.addWidget(self.window.severity_next_button)
+        results_outer.addLayout(nav_layout)
+
+        # Current window scores list
+        window_scores_label = QLabel("Current window")
+        window_scores_label.setProperty("fieldLabel", True)
+        self.window.severity_window_list = QtWidgets.QListWidget()
+        self.window.severity_window_list.setMaximumHeight(90)
+        self.window.severity_window_list.setProperty("inspectorList", True)
+        results_outer.addWidget(window_scores_label)
+        results_outer.addWidget(self.window.severity_window_list)
+
+        # Export
         self.window.severity_export_button = QPushButton("Export CSV")
         self.window.severity_export_button.setToolTip("Export severity scores to a CSV file")
         self.window.severity_export_button.setEnabled(False)
         export_row = QHBoxLayout()
         export_row.addStretch(1)
         export_row.addWidget(self.window.severity_export_button)
-        results_outer = QVBoxLayout()
-        results_outer.setContentsMargins(0, 0, 0, 0)
-        results_outer.setSpacing(4)
-        results_outer.addWidget(results_body)
         results_outer.addLayout(export_row)
-        results_frame = QFrame(page)
-        results_frame.setLayout(results_outer)
 
         layout.addWidget(self._wrap_inspector_section("RESULTS", results_frame))
         layout.addStretch(1)
