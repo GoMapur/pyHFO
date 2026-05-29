@@ -73,26 +73,6 @@ class MiniPlotView(QtWidgets.QGraphicsView):
         else:
             self.timeline_baseline.setData([x_range[0], x_range[1]], [baseline_y, baseline_y])
 
-    def plot_overlay_items(self, items, width: int = 2):
-        """Draw overlay lines, replacing any previously drawn ones.
-
-        items: list of (start, end, y, color) tuples.
-        """
-        for item in getattr(self, '_overlay_items', []):
-            self.plot_widget.removeItem(item)
-        self._overlay_items = []
-        for start, end, y, color in items:
-            item = self.plot_widget.plot(
-                [float(start), float(end)],
-                [float(y), float(y)],
-                pen=pg.mkPen(color=color, width=width),
-            )
-            self._overlay_items.append(item)
-
-    def clear_overlay_items(self):
-        for item in getattr(self, '_overlay_items', []):
-            self.plot_widget.removeItem(item)
-        self._overlay_items = []
 
     def clear(self):
         self.plot_widget.clear()

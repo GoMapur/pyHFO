@@ -4259,12 +4259,10 @@ class MainWindowModel(QObject):
             return
         scores_df = self.backend.severity_result.scores_df
         if scores_df is not None and len(scores_df):
-            items = [
-                (row["start_sec"], row["end_sec"], row["score"],
-                 self._severity_score_color(row["score"]))
-                for _, row in scores_df.iterrows()
-            ]
-            self.window.waveform_plot.mini_plot_controller.plot_overlay_items(items)
+            mini = self.window.waveform_plot.mini_plot_controller
+            for _, row in scores_df.iterrows():
+                color = self._severity_score_color(row["score"])
+                mini.plot_one_biomarker(row["start_sec"], row["end_sec"], row["score"], color, width=2)
             self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
 
