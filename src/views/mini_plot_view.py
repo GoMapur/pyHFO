@@ -73,37 +73,26 @@ class MiniPlotView(QtWidgets.QGraphicsView):
         else:
             self.timeline_baseline.setData([x_range[0], x_range[1]], [baseline_y, baseline_y])
 
-    def plot_severity_scores(self, scores_df, width: int = 2):
-        """Draw severity score lines, replacing any previously drawn ones."""
-        for item in getattr(self, '_severity_items', []):
-            self.plot_widget.removeItem(item)
-        self._severity_items = []
+    def plot_overlay_items(self, items, width: int = 2):
+        """Draw overlay lines, replacing any previously drawn ones.
 
-        for _, row in scores_df.iterrows():
-            score = float(row["score"])
-            color = self._severity_score_color(score)
+        items: list of (start, end, y, color) tuples.
+        """
+        for item in getattr(self, '_overlay_items', []):
+            self.plot_widget.removeItem(item)
+        self._overlay_items = []
+        for start, end, y, color in items:
             item = self.plot_widget.plot(
-                [float(row["start_sec"]), float(row["end_sec"])],
-                [score, score],
+                [float(start), float(end)],
+                [float(y), float(y)],
                 pen=pg.mkPen(color=color, width=width),
             )
-            self._severity_items.append(item)
+            self._overlay_items.append(item)
 
-    @staticmethod
-    def _severity_score_color(score: float) -> str:
-        """Interpolate green(0) → yellow(2.5) → red(5)."""
-        score = max(0.0, min(5.0, score))
-        if score <= 2.5:
-            t = score / 2.5
-            r = int(76  + t * (255 - 76))
-            g = int(175 + t * (235 - 175))
-            b = int(80  + t * (59  - 80))
-        else:
-            t = (score - 2.5) / 2.5
-            r = int(255 + t * (244 - 255))
-            g = int(235 + t * (67  - 235))
-            b = int(59  + t * (54  - 59))
-        return f"#{r:02x}{g:02x}{b:02x}"
+    def clear_overlay_items(self):
+        for item in getattr(self, '_overlay_items', []):
+            self.plot_widget.removeItem(item)
+        self._overlay_items = []
 
     def clear(self):
         self.plot_widget.clear()

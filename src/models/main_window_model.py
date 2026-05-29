@@ -4237,6 +4237,21 @@ class MainWindowModel(QObject):
             result_handler=lambda _: self._severity_done(),
         )
 
+    @staticmethod
+    def _severity_score_color(score: float) -> str:
+        score = max(0.0, min(5.0, score))
+        if score <= 2.5:
+            t = score / 2.5
+            r = int(76  + t * (255 - 76))
+            g = int(175 + t * (235 - 175))
+            b = int(80  + t * (59  - 80))
+        else:
+            t = (score - 2.5) / 2.5
+            r = int(255 + t * (244 - 255))
+            g = int(235 + t * (67  - 235))
+            b = int(59  + t * (54  - 59))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
     def _reapply_severity_overlay(self):
         if not hasattr(self.window, "waveform_plot"):
             return
@@ -4244,7 +4259,12 @@ class MainWindowModel(QObject):
             return
         scores_df = self.backend.severity_result.scores_df
         if scores_df is not None and len(scores_df):
-            self.window.waveform_plot.mini_plot_controller.plot_severity_scores(scores_df)
+            items = [
+                (row["start_sec"], row["end_sec"], row["score"],
+                 self._severity_score_color(row["score"]))
+                for _, row in scores_df.iterrows()
+            ]
+            self.window.waveform_plot.mini_plot_controller.plot_overlay_items(items)
             self.window.waveform_plot.set_miniplot_y_range(0, 5)
         self._update_severity_window_list()
 
