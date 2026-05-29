@@ -6015,6 +6015,8 @@ class MainWindowModel(QObject):
                 combo = getattr(self.window, "combo_box_biomarker", None)
                 if combo is not None:
                     QTimer.singleShot(0, lambda: combo.currentIndexChanged.emit(combo.currentIndex()))
+            if eeg_type == "scalp":
+                QTimer.singleShot(50, lambda: self.toggle_auto_bipolar_view(True))
         self._apply_backend_defaults_if_needed()
         if getattr(self.backend, "param_filter", None) is not None:
             self._sync_filter_inputs_from_param(self.backend.param_filter)
@@ -6060,10 +6062,18 @@ class MainWindowModel(QObject):
     def scroll_time_waveform_plot(self, event):
         t_start = self.window.waveform_time_scroll_bar.value() * self.window.waveform_plot.get_time_window() * self.window.waveform_plot.get_time_increment() / 100
         self.window.waveform_plot.plot(t_start)
+        self._restore_severity_y_range()
 
     def scroll_channel_waveform_plot(self, event):
         channel_start = self.window.channel_scroll_bar.value()
         self.window.waveform_plot.plot(first_channel_to_plot=channel_start, update_biomarker=True)
+        self._reapply_severity_overlay()
+
+    def _restore_severity_y_range(self):
+        """Restore the mini-bar y-range to [0, 5] after a time scroll without redrawing."""
+        if getattr(self, "_severity_df_time", None) is not None and hasattr(self.window, "waveform_plot"):
+            self.window.waveform_plot.set_miniplot_y_range(0, 5)
+            self._update_severity_window_list()
 
     def get_channels_to_plot(self):
         return self.window.waveform_plot.get_channels_to_plot()
