@@ -71,8 +71,8 @@ class PatchEmbedding(nn.Module):
         patch_emb = patch_emb.permute(0, 2, 1, 3).contiguous().view(bz, ch_num, patch_num, self.d_model)
 
         mask_x = mask_x.contiguous().view(bz * ch_num * patch_num, patch_size)
-        spectral = torch.fft.rfft(mask_x, dim=-1, norm='forward')
-        spectral = torch.abs(spectral).contiguous().view(bz, ch_num, patch_num, 101)
+        spectral = torch.fft.rfft(mask_x.float(), dim=-1, norm='forward')
+        spectral = torch.abs(spectral).to(mask_x.dtype).contiguous().view(bz, ch_num, patch_num, 101)
         spectral_emb = self.spectral_proj(spectral)
 
         patch_emb = patch_emb + spectral_emb
