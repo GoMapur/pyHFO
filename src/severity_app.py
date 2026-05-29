@@ -82,7 +82,12 @@ class SeverityScorer:
     def __init__(self, model_dir: str, device: Optional[str] = None,
                  batch_size: int = 32):
         if device is None:
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            if torch.cuda.is_available():
+                device = 'cuda'
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                device = 'mps'
+            else:
+                device = 'cpu'
         self.device     = torch.device(device)
         self.batch_size = batch_size
 
