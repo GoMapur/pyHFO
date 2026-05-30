@@ -100,6 +100,16 @@ class SeverityScorer:
         self._high_freq  = cfg.high_freq
         self._notch_freq = cfg.notch_freq
 
+        # Calibration output range — used to rescale scores to exactly [0, 5]
+        knots = getattr(cfg, "lookup_cal_knots", None) or []
+        if knots:
+            self._cal_min = float(min(knots))
+            self._cal_max = float(max(knots))
+        else:
+            self._cal_min = 0.0
+            self._cal_max = 5.0
+        print(f"SeverityScorer: calibration range [{self._cal_min:.4f}, {self._cal_max:.4f}]")
+
     # ── public API ────────────────────────────────────────────────────────────
 
     def run(self, eeg_data: np.ndarray, channel_names: np.ndarray,
@@ -256,6 +266,11 @@ class SeverityScorer:
                     pct = min(int((start + batch_len) / n * 100), 99)
                     progress_callback.emit(pct)
         bar.close()
+
+        # Rescale to [0, 5] based on calibration table's achievable range
+        cal_range = self._cal_max - self._cal_min
+        if cal_range > 0:
+            scores = (scores - self._cal_min) / cal_range * 5.0
 
         # Reverse: model output 0=severe, 5=benign → app convention 0=benign, 5=severe
         return np.clip(5.0 - scores, 0.0, 5.0)
