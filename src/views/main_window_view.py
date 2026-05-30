@@ -2417,6 +2417,8 @@ class MainWindowView(QObject):
         self.window.severity_dist_plot.getPlotItem().setMenuEnabled(False)
         self.window.severity_dist_plot.setMouseEnabled(x=False, y=False)
         self.window.severity_dist_plot.setXRange(0, 5, padding=0)
+        bottom_axis = self.window.severity_dist_plot.getAxis("bottom")
+        bottom_axis.setTicks([[(i, str(i)) for i in range(6)]])
         results_outer.addWidget(dist_label)
         results_outer.addWidget(self.window.severity_dist_plot)
 
