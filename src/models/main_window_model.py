@@ -4554,7 +4554,7 @@ class MainWindowModel(QObject):
         self._severity_navigate_to_clean_rank()
 
     def _compute_clean_df(self, scores_df, threshold_uv: float = 1000.0):
-        """Return sub-df of non-artifactual segments using vectorised numpy."""
+        """Return sub-df of non-artifactual segments, fully vectorised."""
         try:
             from src.severity_app import TUEG_19, _clean_ch
             tueg_set = set(TUEG_19)
@@ -4562,14 +4562,16 @@ class MainWindowModel(QObject):
                         if _clean_ch(str(ch)) in tueg_set]
             if not eeg_rows:
                 return scores_df.copy()
-            fs = self.backend.sample_freq
-            eeg = self.backend.eeg_data[eeg_rows, :]          # (n_eeg, total_samples)
-            starts = (scores_df["start_sec"].to_numpy() * fs).astype(int)
-            ends   = (scores_df["end_sec"].to_numpy()   * fs).astype(int)
-            clean_mask = np.array([
-                float(np.abs(eeg[:, s:e]).max()) < threshold_uv
-                for s, e in zip(starts, ends)
-            ], dtype=bool)
+            fs      = int(self.backend.sample_freq)
+            n_segs  = len(scores_df)
+            seg_len = int(round((scores_df["end_sec"].iloc[0] - scores_df["start_sec"].iloc[0]) * fs))
+            eeg     = self.backend.eeg_data[eeg_rows, :]   # (n_eeg, total_samples)
+            # Reshape to (n_eeg, n_segs, seg_len) — no Python loop
+            trimmed = eeg[:, :n_segs * seg_len]
+            segs    = trimmed.reshape(len(eeg_rows), n_segs, seg_len)
+            # Max absolute voltage per segment across channels and time
+            max_per_seg = np.abs(segs).max(axis=(0, 2))    # (n_segs,)
+            clean_mask  = max_per_seg < threshold_uv
             return scores_df[clean_mask]
         except Exception:
             return scores_df.copy()
