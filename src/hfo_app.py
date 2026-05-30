@@ -68,8 +68,6 @@ class HFO_App(object):
         self.filtered = False
 
         ## severity scoring related
-        self._severity_scorer = None
-        self._severity_model_dir = None
         self.severity_result = None
 
         #60Hz filter related
@@ -577,9 +575,7 @@ class HFO_App(object):
         )
 
     def set_default_cpu_classifier(self):
-        '''
-        This is the function should be linked to the default cpu button in the set artifact window
-        '''
+        '''Set default CPU classifier parameters. Weights are loaded lazily on first classify call.'''
         artifact_path = os.path.join(Path(os.path.dirname(__file__)).parent, "ckpt", "model_a.tar")
         spike_path = os.path.join(Path(os.path.dirname(__file__)).parent, "ckpt", "model_s.tar")
         ehfo_path = os.path.join(Path(os.path.dirname(__file__)).parent, "ckpt", "model_e.tar")
@@ -591,8 +587,7 @@ class HFO_App(object):
                                                 use_spike=True, use_ehfo=True,
                                                 device="cpu", batch_size=32, model_type="default_cpu",
                                                 source_preference="huggingface")
-        self.classifier = None
-        self.set_classifier(self.param_classifier)
+        self.classifier = None  # weights load lazily on first classify call
 
     def set_default_gpu_classifier(self):
         '''
@@ -662,37 +657,20 @@ class HFO_App(object):
     def default_severity_model_dir():
         return str(Path(os.path.dirname(__file__)).parent / "ckpt" / "severity_model")
 
-    def run_severity_scoring(self, model_dir: str = None, progress_callback=None):
-        '''
-        Score the loaded recording using the BASED severity model.
-
-        model_dir: path to the HF directory produced by convert_checkpoint.py.
-                   Defaults to ckpt/severity_model/ bundled with the app.
-        Returns a SeverityResult (also stored as self.severity_result).
-        '''
-        from src.severity_app import SeverityScorer
-
-        if model_dir is None:
-            model_dir = self.default_severity_model_dir()
-
+    def run_severity_scoring(self, scorer, progress_callback=None):
         if self.eeg_data is None or self.channel_names is None:
             raise ValueError("Load an EEG recording before running severity scoring.")
-
-        if self._severity_scorer is None or self._severity_model_dir != model_dir:
-            self._severity_scorer = SeverityScorer(model_dir)
-            self._severity_model_dir = model_dir
-
-        self.severity_result = self._severity_scorer.run(
+        self.severity_result = scorer.run(
             self.eeg_data, self.channel_names, self.sample_freq,
             progress_callback=progress_callback,
         )
         return self.severity_result
 
     def export_severity_csv(self, path: str):
-        '''Export per-segment severity scores to a CSV file.'''
         if self.severity_result is None:
             raise ValueError("Run severity scoring first.")
-        self._severity_scorer.export_csv(self.severity_result, path)
+        from src.severity_app import SeverityScorer
+        SeverityScorer.export_csv_static(self.severity_result, path)
 
     def get_severity_summary(self):
         '''Return dict with mean, peak, peak_time or None if not yet scored.'''

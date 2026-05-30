@@ -90,8 +90,6 @@ class SpindleApp(object):
         self.analysis_session = AnalysisSession(self.biomarker_type)
 
         ## severity scoring related
-        self._severity_scorer = None
-        self._severity_model_dir = None
         self.severity_result = None
 
     def set_n_jobs(self, n_jobs):
@@ -136,16 +134,10 @@ class SpindleApp(object):
     def default_severity_model_dir():
         return str(Path(os.path.dirname(__file__)).parent / "ckpt" / "severity_model")
 
-    def run_severity_scoring(self, model_dir: str = None, progress_callback=None):
-        from src.severity_app import SeverityScorer
-        if model_dir is None:
-            model_dir = self.default_severity_model_dir()
+    def run_severity_scoring(self, scorer, progress_callback=None):
         if self.eeg_data is None or self.channel_names is None:
             raise ValueError("Load an EEG recording before running severity scoring.")
-        if self._severity_scorer is None or self._severity_model_dir != model_dir:
-            self._severity_scorer = SeverityScorer(model_dir)
-            self._severity_model_dir = model_dir
-        self.severity_result = self._severity_scorer.run(
+        self.severity_result = scorer.run(
             self.eeg_data, self.channel_names, self.sample_freq,
             progress_callback=progress_callback,
         )
@@ -154,7 +146,8 @@ class SpindleApp(object):
     def export_severity_csv(self, path: str):
         if self.severity_result is None:
             raise ValueError("Run severity scoring first.")
-        self._severity_scorer.export_csv(self.severity_result, path)
+        from src.severity_app import SeverityScorer
+        SeverityScorer.export_csv_static(self.severity_result, path)
 
     def get_severity_summary(self):
         if self.severity_result is None:
@@ -636,8 +629,7 @@ class SpindleApp(object):
                                                 artifact_card=artifact_card, spike_card=spike_card, use_spike=True,
                                                 device="cpu", batch_size=32, model_type="default_cpu",
                                                 source_preference="huggingface")
-        self.classifier = None
-        self.set_classifier(self.param_classifier)
+        self.classifier = None  # weights load lazily on first classify call
 
     def set_default_gpu_classifier(self):
         '''

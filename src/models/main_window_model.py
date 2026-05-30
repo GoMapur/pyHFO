@@ -4227,16 +4227,22 @@ class MainWindowModel(QObject):
                                     "Load an EEG recording before running severity scoring.")
             return
 
-        model_dir = getattr(self.window, "_severity_model_dir", None)
-        if not model_dir:
-            model_dir = self.backend.default_severity_model_dir()
+        from src.severity_app import SeverityScorer
+        model_dir = self.backend.default_severity_model_dir()
+        if not hasattr(self, "_severity_scorer") or self._severity_scorer is None:
+            self._severity_scorer = None  # will be created inside worker
 
         self.message_handler("Running severity scoring...")
         self._set_workflow_message("Running severity scoring...")
         btn = getattr(self.window, "severity_run_button", None)
         self._begin_busy_task("severity", "Scoring...", [btn] if btn else [])
 
-        worker = Worker(lambda progress_callback: self.backend.run_severity_scoring(model_dir, progress_callback=progress_callback))
+        def _do_score(progress_callback):
+            if not hasattr(self, "_severity_scorer") or self._severity_scorer is None:
+                self._severity_scorer = SeverityScorer(model_dir)
+            return self.backend.run_severity_scoring(self._severity_scorer, progress_callback=progress_callback)
+
+        worker = Worker(_do_score)
         safe_connect_signal_slot(worker.signals.progress, self._severity_progress)
         self._connect_worker(
             worker, "Severity scoring",
@@ -4423,7 +4429,8 @@ class MainWindowModel(QObject):
         from src.severity_app import SeverityScorer
         from src.utils.utils_montage import infer_eeg_type
 
-        scorer = None
+        # Reuse model-level scorer if already loaded, else create once for whole batch
+        scorer = getattr(self, "_severity_scorer", None)
         scored = skipped = errors = 0
 
         bar = tqdm(files, desc="Batch scoring", unit="file", file=sys.stdout, ascii=True)
@@ -4442,8 +4449,8 @@ class MainWindowModel(QObject):
                     skipped += 1
                     continue
                 if scorer is None:
-                    model_dir = app.default_severity_model_dir()
-                    scorer = SeverityScorer(model_dir)
+                    scorer = SeverityScorer(app.default_severity_model_dir())
+                    self._severity_scorer = scorer
                 result = scorer.run(app.eeg_data, app.channel_names, app.sample_freq)
                 scorer.export_csv(result, cache_path)
                 scored += 1

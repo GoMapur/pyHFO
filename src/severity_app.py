@@ -163,6 +163,10 @@ class SeverityScorer:
     def export_csv(self, result: SeverityResult, path: str):
         result.scores_df.to_csv(path, index=False)
 
+    @staticmethod
+    def export_csv_static(result: SeverityResult, path: str):
+        result.scores_df.to_csv(path, index=False)
+
     # ── preprocessing ─────────────────────────────────────────────────────────
 
     def _preprocess(self, eeg_data: np.ndarray, channel_names: np.ndarray,
